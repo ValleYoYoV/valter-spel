@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mumin: Jakten på den Stulna Hatten</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231b2740'/%3E%3Cellipse cx='8' cy='9' rx='5' ry='6' fill='%23fff'/%3E%3Cellipse cx='8' cy='12' rx='3' ry='3' fill='%23fff'/%3E%3Crect x='6' y='6' width='1' height='2' fill='%23000'/%3E%3Crect x='9' y='6' width='1' height='2' fill='%23000'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:#0a0c16; display:flex; align-items:center; justify-content:center;
+  overflow:hidden; font-family:"Press Start 2P", monospace;
+}
+#stage{position:relative; line-height:0}
+canvas{
+  display:block; image-rendering:pixelated; image-rendering:crisp-edges;
+  background:#1b2740; cursor:default;
+  box-shadow:0 0 0 3px #000, 0 0 40px rgba(110,170,230,.18), 0 18px 54px rgba(0,0,0,.8);
+}
+#crt{position:absolute; left:0; top:0; pointer-events:none}
+#crt::before{content:"";position:absolute;inset:0;
+  background:repeating-linear-gradient(180deg,rgba(0,0,0,.26) 0 1px,rgba(0,0,0,0) 1px 3px)}
+#crt::after{content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse 74% 68% at 50% 50%,rgba(0,0,0,0) 48%,rgba(0,0,0,.55) 100%)}
+#back{
+  position:fixed; top:10px; left:10px; z-index:60; font-size:9px; letter-spacing:2px;
+  text-decoration:none; color:#f0c060; background:rgba(10,12,22,.85);
+  border:2px solid #f0c060; padding:7px 11px; opacity:.26; transition:opacity .2s,background .2s;
+}
+#back:hover{opacity:1; background:#f0c060; color:#0a0c16}
+#hint{position:fixed;bottom:8px;left:0;right:0;text-align:center;
+  font-size:7px;letter-spacing:1px;color:#39405c;pointer-events:none}
+</style>
+</head>
+<body>
+<a href="../../index.html" id="back">&#8592; HYLLAN</a>
+<div id="stage"><canvas id="g"></canvas><div id="crt"></div></div>
+<p id="hint">PILTANGENTER / WASD GÅR &middot; Z ELLER ENTER PRATAR &amp; VÄLJER &middot; X BACKAR</p>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   MUMIN: JAKTEN PÅ DEN STULNA HATTEN
+   Ett 16-bitars JRPG i en enda fil. Ingen byggprocess, inga beroenden.
+
+   Innehåll i ordning:
+     1. Palett och pixelkonst        5. Dialog med skrivmaskinseffekt
+     2. Tiles (ritas procedurellt)   6. Overworld
+     3. Kartor och NPC:er            7. Strider
+     4. Ljud (Web Audio)             8. Loop och rendering
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const W = 320, H = 240, TS = 16;
+const cv = document.getElementById("g");
+const ctx = cv.getContext("2d");
+cv.width = W; cv.height = H;
+ctx.imageSmoothingEnabled = false;
+
+function fit() {
+  const s = Math.max(1, Math.min(Math.floor(innerWidth / W), Math.floor(innerHeight / H), 4));
+  cv.style.width = W * s + "px"; cv.style.height = H * s + "px";
+  const c = document.getElementById("crt");
+  c.style.width = cv.style.width; c.style.height = cv.style.height;
+}
+fit(); addEventListener("resize", fit);
+
+/* ═══ 1. PALETT OCH PIXELKONST ═════════════════════════════════════════ */
+const PAL = {
+  "0": "#141422", "1": "#ffffff", "2": "#d8dcea", "3": "#24422c", "4": "#3f6e38",
+  "5": "#6aa845", "6": "#7a4b24", "7": "#b98a4e", "8": "#c8402f", "9": "#f0c060",
+  a: "#2f5f9e", b: "#6fa8d8", c: "#bde0f5", d: "#8a5aa8", e: "#3d2450", f: "#b9bcc9",
+  g: "#5c6070", h: "#1b2740", i: "#eef6ff", j: "#2a7a4a", k: "#e8d8a0", l: "#f28a2e"
+};
+
+/* Teckenrutnät → en liten canvas som sedan kopieras. Punkt = genomskinligt. */
+const ART = {
+  /* Mumin: vit trind kropp, blå halsduk */
+  mumin: [
+    "....0000....",
+    "..00111100..",
+    ".0111111110.",
+    "011111111110",
+    "011011110110",
+    "011111111110",
+    "011111111110",
+    ".0111111110.",
+    "..0aaaaaa0..",
+    "..01111110..",
+    ".011111111 0".replace(" ", "1"),
+    "..01111110..",
+    "..01100110..",
+    "...00..00..."
+  ],
+  /* Snusmumriken: grön hatt, brun rock */
+  snus: [
+    "...333333...",
+    "..33333333..",
+    ".0333333330.",
+    "..07777770..",
+    "..07070700..",
+    "..07777770..",
+    "...077770...",
+    "..06666660..",
+    ".066666666 0".replace(" ", "6"),
+    ".066666666 0".replace(" ", "6"),
+    "..06666660..",
+    "..06600660..",
+    "..06600660..",
+    "...00..00..."
+  ],
+  /* Muminmamman: förkläde och handväska */
+  mamma: [
+    "....0000....",
+    "..00111100..",
+    ".0111111110.",
+    "011111111110",
+    "011011110110",
+    "011111111110",
+    ".0111111110.",
+    "..08888880..",
+    ".088111880 0".replace(" ", "8"),
+    ".088111880 0".replace(" ", "8"),
+    "..08888880..",
+    "..08800880..",
+    "..01100110..",
+    "...00..00..."
+  ],
+  /* Frost-spöke: genomskinlig isblå hamn med glödande ögon */
+  ghost: [
+    "......0000......",
+    "....00cccc00....",
+    "...0cccccccc0...",
+    "..0cccccccccc0..",
+    "..0cciccciccc0..",
+    "..0cciccciccc0..",
+    "..0cccccccccc0..",
+    "..0cccccccccc0..",
+    "..0ccc0000ccc0..",
+    "..0cccccccccc0..",
+    "...0cccccccc0...",
+    "...0cbcbcbcb0...",
+    "....0b0b0b0b....",
+    ".....0.0.0.0....",
+    "................",
+    "................"
+  ],
+  /* Vild Hattifnatt: blek stolpfigur med runda ögon */
+  hatti: [
+    "...0000...",
+    "..0ffff0..",
+    ".0ffffff0.",
+    ".0f0ff0f0.",
+    ".0ffffff0.",
+    ".0ffffff0.",
+    ".0ffffff0.",
+    "..0ffff0..",
+    "..0ffff0..",
+    "..0ffff0..",
+    "..0ffff0..",
+    "..0ffff0..",
+    "..0ffff0..",
+    "..0ffff0..",
+    "..0f00f0..",
+    "..0f..f0..",
+    "..00..00..",
+    ".........."
+  ],
+  /* Mårran: kall lila massa med isande blick */
+  marran: [
+    "........0000........",
+    "......00dddd00......",
+    ".....0dddddddd0.....",
+    "....0dddddddddd0....",
+    "...0dddddddddddd0...",
+    "...0ddcddddddccd0...",
+    "...0ddcddddddccd0...",
+    "..0dddddddddddddd0..",
+    "..0dddd000000dddd0..",
+    "..0ddd0cccccc0ddd0..",
+    "..0dddd000000dddd0..",
+    "..0dddddddddddddd0..",
+    ".0dddddddddddddddd0.",
+    ".0deeddddddddddeed0.",
+    ".0deeddddddddddeed0.",
+    ".0dddddddddddddddd0.",
+    "0dddddddddddddddddd0",
+    "0deedddddddddddddee0",
+    "0dddddddddddddddddd0",
+    "00dddddddddddddddd00",
+    ".0cc0cc0cc0cc0cc0cc0",
+    "..0..0..0..0..0..0..",
+    "....................",
+    "...................."
+  ],
+  /* Muminpappans hatt — kvällens hela anledning */
+  hatt: [
+    "..000000..",
+    ".0hhhhhh0.",
+    ".0hhhhhh0.",
+    ".0hhhhhh0.",
+    "0hhhhhhhh0",
+    "0999999990",
+    "0hhhhhhhh0",
+    "0000000000",
+    "..........",
+    ".........."
+  ]
+};
+
+const IMG = {};
+function bake(rows) {
+  const h = rows.length, w = rows[0].length;
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const ch = rows[y][x];
+    if (ch === "." || !PAL[ch]) continue;
+    g.fillStyle = PAL[ch]; g.fillRect(x, y, 1, 1);
+  }
+  return c;
+}
+function bakeArt() { for (const k in ART) IMG[k] = bake(ART[k]); }
+
+function blit(name, x, y, scale, flip) {
+  const im = IMG[name]; if (!im) return;
+  const s = scale || 1;
+  ctx.save();
+  if (flip) { ctx.translate(Math.round(x + im.width * s), Math.round(y)); ctx.scale(-1, 1); }
+  else ctx.translate(Math.round(x), Math.round(y));
+  ctx.drawImage(im, 0, 0, im.width * s, im.height * s);
+  ctx.restore();
+}
+
+/* ═══ 2. TILES — ritas procedurellt till en atlas ══════════════════════ */
+const SOLID = "#~rHRFT^WS";           // tecken man inte kan gå på
+const ENCOUNTER = ".,I";              // tecken där fiender kan dyka upp
+const TILE_IMG = {};
+
+function paintTile(ch) {
+  const c = document.createElement("canvas");
+  c.width = TS; c.height = TS;
+  const g = c.getContext("2d");
+  const fill = (col, x, y, w, h) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+
+  if (ch === "." || ch === ",") {
+    fill(PAL[4], 0, 0, TS, TS);
+    fill(PAL[5], 0, 0, TS, 2);
+    for (let i = 0; i < 5; i++) fill(PAL[3], (i * 7 + 3) % 14, (i * 5 + 4) % 13, 1, 1);
+    if (ch === ",") { fill(PAL[5], 4, 9, 1, 4); fill(PAL[5], 6, 7, 1, 6); fill(PAL[5], 8, 10, 1, 3); }
+  } else if (ch === "p") {
+    fill("#9c8a5e", 0, 0, TS, TS);
+    for (let i = 0; i < 7; i++) fill("#b3a077", (i * 5 + 2) % 15, (i * 6 + 1) % 15, 2, 1);
+  } else if (ch === "#") {
+    fill(PAL[4], 0, 0, TS, TS);
+    fill(PAL[6], 7, 10, 3, 6);
+    fill(PAL[3], 2, 1, 12, 10); fill(PAL[4], 3, 2, 10, 7); fill(PAL[5], 5, 3, 5, 3);
+  } else if (ch === "~") {
+    fill(PAL.a, 0, 0, TS, TS);
+    fill(PAL.b, 1, 4, 7, 1); fill(PAL.b, 8, 10, 6, 1); fill(PAL.b, 3, 13, 5, 1);
+  } else if (ch === "=") {
+    fill(PAL[6], 0, 0, TS, TS);
+    for (let i = 0; i < 4; i++) fill(PAL[7], 0, i * 4 + 1, TS, 2);
+    fill(PAL[0], 0, 0, TS, 1); fill(PAL[0], 0, 15, TS, 1);
+  } else if (ch === "r") {
+    fill(PAL[4], 0, 0, TS, TS);
+    fill(PAL.g, 3, 5, 10, 8); fill(PAL.f, 5, 6, 6, 4); fill(PAL[0], 3, 12, 10, 1);
+  } else if (ch === "H") {
+    fill("#2e5c9c", 0, 0, TS, TS); fill("#24487a", 0, 0, TS, 1);
+    fill(PAL.c, 4, 4, 8, 8); fill("#24487a", 7, 4, 2, 8); fill("#24487a", 4, 7, 8, 2);
+  } else if (ch === "R") {
+    fill(PAL[8], 0, 0, TS, TS);
+    fill("#9c2c20", 0, 6, TS, 2); fill("#9c2c20", 0, 13, TS, 2);
+  } else if (ch === "D") {
+    fill("#5c3a1c", 0, 0, TS, TS); fill(PAL[7], 2, 2, 12, 14);
+    fill(PAL[9], 11, 9, 2, 2); fill("#5c3a1c", 7, 2, 1, 14);
+  } else if (ch === "F") {
+    fill(PAL[4], 0, 0, TS, TS);
+    fill(PAL[1], 2, 3, 2, 12); fill(PAL[1], 11, 3, 2, 12); fill(PAL[1], 0, 5, TS, 2);
+  } else if (ch === "^") {
+    fill(PAL.g, 0, 0, TS, TS);
+    fill(PAL.f, 3, 2, 10, 12); fill(PAL.i, 5, 3, 5, 4); fill(PAL[0], 0, 0, TS, 1);
+  } else if (ch === "W") {
+    fill("#2b3550", 0, 0, TS, TS);
+    fill("#3a4666", 1, 1, 6, 6); fill("#3a4666", 8, 8, 6, 6); fill(PAL.h, 0, 0, TS, 1);
+  } else if (ch === "C") {
+    fill("#3c4868", 0, 0, TS, TS);
+    for (let i = 0; i < 4; i++) fill("#46537a", (i * 6 + 2) % 14, (i * 7 + 3) % 14, 2, 2);
+  } else if (ch === "I") {
+    fill(PAL.b, 0, 0, TS, TS); fill(PAL.c, 0, 0, TS, 3);
+    fill(PAL.i, 3, 6, 6, 1); fill(PAL.i, 8, 11, 5, 1);
+  } else if (ch === "T") {
+    fill(PAL[4], 0, 0, TS, TS);
+    g.fillStyle = PAL[3]; g.beginPath(); g.moveTo(8, 1); g.lineTo(15, 15); g.lineTo(1, 15); g.fill();
+    fill(PAL[0], 7, 8, 3, 7);
+  } else if (ch === "S") {
+    fill(PAL[4], 0, 0, TS, TS);
+    fill(PAL[6], 7, 8, 2, 8); fill(PAL[7], 2, 3, 12, 6); fill(PAL[6], 3, 5, 10, 1);
+  } else {
+    fill(PAL[4], 0, 0, TS, TS);
+  }
+  return c;
+}
+function bakeTiles() {
+  "..,p#~=rHRDF^WCITS".split("").forEach(ch => { if (!TILE_IMG[ch]) TILE_IMG[ch] = paintTile(ch); });
+}
+
+/* ═══ 3. KARTOR OCH NPC:ER ════════════════════════════════════════════ */
+/* Varje karta är 20×15 tecken. 'a'/'b' är utgångar som kartan själv
+   översätter i sin exits-tabell. */
+const MAPS = {
+  valley: {
+    name: "MUMINDALEN",
+    rows: [
+      "########a###########",
+      "#.....,......RRRR..#",
+      "#..,........RRRRRR.#",
+      "#......,....HHDDHH.#",
+      "#...,.......HHHHHH.#",
+      "#.....,.....FFFFFF.#",
+      "#....,..,..........#",
+      "b..,....pppppp.....#",
+      "#..S...pp....pp....#",
+      "#.,..pp,......pp...#",
+      "#...pp....,....pp..#",
+      "#..pp.,.........pp.#",
+      "#.pp....,.....,..p.#",
+      "#.p..,......,....p.#",
+      "####################"
+    ],
+    exits: { a: { map: "mountain", x: 8, y: 13 }, b: { map: "bridge", x: 17, y: 7 } },
+    npcs: [
+      { x: 14, y: 6, art: "mamma", name: "MUMINMAMMAN", heal: true,
+        lines: ["Där är ni ju, kära barn!",
+                "Mårran tog pappas hatt OCH\nhela vinterförrådet...",
+                "Kom hit när ni är trötta, så\nfår ni hallonsaft."] },
+      { x: 3, y: 8, art: null, name: "SKYLT", sign: true,
+        lines: ["VÄSTERUT: BRON OCH TÄLTET\nNORRUT: ENSAMMA BERGEN"] }
+    ]
+  },
+
+  bridge: {
+    name: "BRON",
+    rows: [
+      "####################",
+      "#..,....#####......#",
+      "#.....,.#...#.,....#",
+      "#..,....#.T.#......a",
+      "#.......#......,...#",
+      "#..~~~~~~~~~~~~~...#",
+      "#..~~~~~~~~~~~~~...#",
+      "#..=================",
+      "#..~~~~~~~~~~~~~...#",
+      "#..~~~~~~~~~~~~~...#",
+      "#....,....,........#",
+      "#..,.....,....,....#",
+      "#.....,.......,....#",
+      "#..,......,........#",
+      "####################"
+    ],
+    exits: { a: { map: "valley", x: 1, y: 7 } },
+    npcs: [
+      { x: 10, y: 4, art: "snus", name: "TÄLTET", sign: true,
+        lines: ["Snusmumrikens tält står tomt\n— han är ju med dig.",
+                "Munspelet ligger kvar. Du tar\nmed det. Sömnmelodi lärd!"] }
+    ]
+  },
+
+  mountain: {
+    name: "ENSAMMA BERGEN",
+    rows: [
+      "^^^^^^^^a^^^^^^^^^^^",
+      "^...,........,.....^",
+      "^..^^^....^^^....^^^",
+      "^...^^.....^^......^",
+      "^.,.........,..r...^",
+      "^....r...,.........^",
+      "^..^^^...^^^...^^^.^",
+      "^...,.......,......^",
+      "^.......r..........^",
+      "^..,.....,....,....^",
+      "^..^^^.....^^^.....^",
+      "^....,......,...r..^",
+      "^.,.........,......^",
+      "^........,.........^",
+      "^^^^^^^^b^^^^^^^^^^^"
+    ],
+    exits: { a: { map: "cave1", x: 10, y: 13 }, b: { map: "valley", x: 8, y: 1 } },
+    npcs: []
+  },
+
+  cave1: {
+    name: "MÖRKÖNS ISGROTTA",
+    rows: [
+      "WWWWWWWWWWaWWWWWWWWW",
+      "WCCCCCWWWWCCCWWWWCCW",
+      "WCIICCCCWWCCCWWWWCCW",
+      "WCIICCCCCCCCCCCCCCCW",
+      "WCCCCWWWWCCCWWWWCCCW",
+      "WWWCCWWWWCCCWWWWCCWW",
+      "WWWCCCCCCCCCCCCCCCWW",
+      "WWWWWCCWWWCCWWWCCCWW",
+      "WCCCCCCWWWCCWWWCCCCW",
+      "WCIIICCWWWCCWWWCIIIW",
+      "WCIIICCCCCCCCCCCIIIW",
+      "WCCCCCWWWCCCWWWCCCCW",
+      "WWWWWWWWWCCCWWWWWWWW",
+      "WWWWWWWWWCCCWWWWWWWW",
+      "WWWWWWWWWWbWWWWWWWWW"
+    ],
+    exits: { a: { map: "cave2", x: 10, y: 13 }, b: { map: "mountain", x: 8, y: 1 } },
+    npcs: []
+  },
+
+  cave2: {
+    name: "MÅRRANS SAL",
+    rows: [
+      "WWWWWWWWWWWWWWWWWWWW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WIIIIIIIIIIIIIIIIIIW",
+      "WWWWWWWWbWWWWWWWWWWW"
+    ],
+    exits: { b: { map: "cave1", x: 10, y: 1 } },
+    npcs: [],
+    boss: { x: 10, y: 3 }
+  }
+};
+
+/* ═══ 4. LJUD ═════════════════════════════════════════════════════════ */
+const SFX = (function () {
+  let ac = null, mst = null, muted = false;
+  function A() {
+    if (typeof window === "undefined") return null;
+    if (!ac) {
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        mst = ac.createGain(); mst.gain.value = 0.3; mst.connect(ac.destination);
+      } catch (e) { return null; }
+    }
+    if (ac.state === "suspended") ac.resume().catch(() => {});
+    return ac;
+  }
+  function t(f, dur, type, vol, slide, delay) {
+    const a = A(); if (!a || muted) return;
+    const t0 = a.currentTime + (delay || 0);
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type || "square"; o.frequency.setValueAtTime(f, t0);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(1, slide), t0 + dur);
+    g.gain.setValueAtTime(vol == null ? .22 : vol, t0);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    o.connect(g); g.connect(mst); o.start(t0); o.stop(t0 + dur + .02);
+  }
+  function nz(dur, vol, cut, delay) {
+    const a = A(); if (!a || muted) return;
+    const t0 = a.currentTime + (delay || 0);
+    const len = (a.sampleRate * dur) | 0;
+    const buf = a.createBuffer(1, Math.max(1, len), a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const s = a.createBufferSource(); s.buffer = buf;
+    const f = a.createBiquadFilter(); f.type = "lowpass";
+    f.frequency.setValueAtTime(cut || 1800, t0);
+    f.frequency.exponentialRampToValueAtTime(160, t0 + dur);
+    const g = a.createGain();
+    g.gain.setValueAtTime(vol == null ? .22 : vol, t0);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    s.connect(f); f.connect(g); g.connect(mst); s.start(t0); s.stop(t0 + dur + .02);
+  }
+  return {
+    blip()   { t(760, .05, "square", .16); },
+    talk()   { t(420, .022, "square", .07); },
+    step()   { t(180, .03, "triangle", .06); },
+    sword()  { nz(.14, .26, 3200); t(320, .1, "sawtooth", .16, 120); },
+    pew()    { t(900, .09, "square", .18, 280); },
+    heal()   { t(523, .09, "sine", .2); t(659, .09, "sine", .2, null, .08);
+               t(784, .16, "sine", .22, null, .16); },
+    sleep()  { t(392, .13, "sine", .18, 300); t(330, .13, "sine", .18, 250, .12);
+               t(262, .22, "sine", .18, 180, .24); },
+    guard()  { t(196, .16, "square", .2, 260); },
+    hurt()   { t(220, .2, "sawtooth", .2, 70); nz(.1, .12, 800); },
+    ice()    { nz(.4, .2, 5200); t(1200, .3, "sine", .14, 300); },
+    win()    { [523, 659, 784, 1046].forEach((f, i) => t(f, i === 3 ? .3 : .1, "square", .2, null, i * .1)); },
+    lose()   { [392, 330, 262, 196].forEach((f, i) => t(f, i === 3 ? .6 : .2, "square", .22, i === 3 ? 90 : null, i * .2)); },
+    encounter() { t(880, .07, "square", .2); t(1170, .07, "square", .2, null, .07);
+                  nz(.3, .2, 2600, .14); },
+    mute()   { muted = !muted; if (mst) mst.gain.value = muted ? 0 : .3; return muted; },
+    wake()   { A(); }
+  };
+})();
+
+/* ═══ 5. SPELDATA ═════════════════════════════════════════════════════ */
+const SKILLS = {
+  stot:  { name: "MODIG STÖT", mp: 3, who: "mumin",
+           desc: "Höjer försvaret rejält." },
+  sang:  { name: "VÅRSÅNG", mp: 5, who: "snus",
+           desc: "Läker en vän med sång." },
+  somn:  { name: "SÖMNMELODI", mp: 6, who: "snus",
+           desc: "Munspel som söver fiender." }
+};
+
+const ITEMS = {
+  saft:  { name: "HALLONSAFT", desc: "Läker 30 HP", hp: 30 },
+  pann:  { name: "PANNKAKA",   desc: "Läker 70 HP", hp: 70 },
+  te:    { name: "MUMINTE",    desc: "Ger 15 MP",   mp: 15 }
+};
+
+const ENEMY_DEF = {
+  ghost: { name: "FROST-SPÖKE", art: "ghost", hp: 24, atk: 9,  def: 5, agi: 6,  xp: 9,  scale: 2,
+           moves: [{ n: "frostvind", p: .3 }] },
+  hatti: { name: "VILD HATTIFNATT", art: "hatti", hp: 15, atk: 11, def: 2, agi: 13, xp: 7, scale: 2,
+           moves: [] },
+  marran:{ name: "MÅRRAN", art: "marran", hp: 260, atk: 19, def: 13, agi: 8, xp: 200, scale: 2, boss: true,
+           moves: [{ n: "isstorm", p: .3 }, { n: "frostblick", p: .25 }, { n: "kyla", p: .15 }] }
+};
+
+/* Erfarenhet som krävs för nivå 2, 3, 4 … */
+const XP_TABLE = [0, 20, 48, 88, 145, 225, 335, 480, 670, 910, 1210];
+
+function makeHero(id) {
+  if (id === "mumin") return {
+    id, name: "MUMIN", art: "mumin", lv: 1, xp: 0,
+    hp: 48, maxhp: 48, mp: 10, maxmp: 10, atk: 12, def: 10, agi: 7,
+    skills: ["stot"], guard: 0, alive: true
+  };
+  return {
+    id: "snus", name: "SNUSMUMRIKEN", art: "snus", lv: 1, xp: 0,
+    hp: 34, maxhp: 34, mp: 24, maxmp: 24, atk: 9, def: 6, agi: 12,
+    skills: ["sang"], guard: 0, alive: true
+  };
+}
+
+function xpNeeded(lv) { return XP_TABLE[Math.min(lv, XP_TABLE.length - 1)]; }
+
+/* Returnerar en lista med texter om någon gick upp i nivå. */
+function grantXp(party, amount) {
+  const msgs = [];
+  party.forEach(h => {
+    if (!h.alive) return;
+    h.xp += amount;
+    while (h.lv < XP_TABLE.length - 1 && h.xp >= xpNeeded(h.lv)) {
+      h.lv++;
+      const hpUp = h.id === "mumin" ? 9 : 6;
+      const mpUp = h.id === "mumin" ? 2 : 4;
+      h.maxhp += hpUp; h.hp = h.maxhp;
+      h.maxmp += mpUp; h.mp = h.maxmp;
+      h.atk += h.id === "mumin" ? 3 : 2;
+      h.def += h.id === "mumin" ? 3 : 1;
+      h.agi += 1;
+      msgs.push(h.name + " nådde nivå " + h.lv + "!");
+      if (h.id === "snus" && h.lv === 3 && h.skills.indexOf("somn") < 0) {
+        h.skills.push("somn");
+        msgs.push("SNUSMUMRIKEN lärde sig\nSÖMNMELODI!");
+      }
+    }
+  });
+  return msgs;
+}
+
+/* ═══ 6. SPELTILLSTÅND ════════════════════════════════════════════════ */
+const MODE = { TITLE: 0, WORLD: 1, TALK: 2, BATTLE: 3, END: 4 };
+
+function newState() {
+  return {
+    mode: MODE.TITLE,
+    map: "valley", px: 13, py: 7, dir: 1, walk: 0,
+    trail: [],
+    party: [makeHero("mumin"), makeHero("snus")],
+    bag: { saft: 3, pann: 1, te: 2 },
+    steps: 0, nextEnc: 14,
+    marranDead: false, gotSomn: false, intro: false,
+    dlg: null, battle: null, t: 0, flash: 0, fade: 0
+  };
+}
+let S = newState();
+
+function mapAt(map, x, y) {
+  const m = MAPS[map];
+  if (y < 0 || y >= m.rows.length) return "#";
+  const row = m.rows[y];
+  if (x < 0 || x >= row.length) return "#";
+  return row[x];
+}
+function isSolid(map, x, y) {
+  const ch = mapAt(map, x, y);
+  if (MAPS[map].exits && MAPS[map].exits[ch]) return false;
+  if (SOLID.indexOf(ch) >= 0) return true;
+  const npc = npcAt(map, x, y);
+  return !!npc;
+}
+function npcAt(map, x, y) {
+  return (MAPS[map].npcs || []).find(n => n.x === x && n.y === y) || null;
+}
+
+/* ═══ 7. DIALOG MED SKRIVMASKINSEFFEKT ════════════════════════════════ */
+function say(lines, onDone) {
+  S.dlg = { lines: lines.slice(), i: 0, chars: 0, done: false, onDone: onDone || null, speaker: null };
+  S.mode = MODE.TALK;
+}
+function sayAs(speaker, lines, onDone) {
+  say(lines, onDone);
+  S.dlg.speaker = speaker;
+}
+function updateDialog(dt) {
+  const d = S.dlg; if (!d) return;
+  const full = d.lines[d.i];
+  if (d.chars < full.length) {
+    const before = d.chars | 0;
+    d.chars = Math.min(full.length, d.chars + dt * 46);
+    if ((d.chars | 0) > before && (d.chars | 0) % 3 === 0) SFX.talk();
+  }
+  /* Utanför if-satsen: annars blir repliken markerad som färdig först
+     bildrutan EFTER att sista tecknet skrivits, och ▼-pilen hackar. */
+  if (d.chars >= full.length) d.done = true;
+}
+function advanceDialog() {
+  const d = S.dlg; if (!d) return;
+  const full = d.lines[d.i];
+  if (d.chars < full.length) { d.chars = full.length; d.done = true; return; }
+  d.i++;
+  if (d.i >= d.lines.length) {
+    const cb = d.onDone;
+    S.dlg = null;
+    S.mode = MODE.WORLD;
+    if (cb) cb();
+  } else { d.chars = 0; d.done = false; }
+  SFX.blip();
+}
+
+/* ═══ 8. STRIDER ══════════════════════════════════════════════════════ */
+function makeEnemy(key, idx) {
+  const d = ENEMY_DEF[key];
+  return {
+    key, name: d.name, art: d.art, scale: d.scale,
+    hp: d.hp, maxhp: d.hp, atk: d.atk, def: d.def, agi: d.agi,
+    xp: d.xp, boss: !!d.boss, moves: d.moves,
+    sleep: 0, alive: true, idx, flash: 0, shake: 0
+  };
+}
+
+function randomEncounterParty(mapName) {
+  const n = 1 + ((Math.random() * (mapName.indexOf("cave") === 0 ? 3 : 2)) | 0);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const key = (mapName.indexOf("cave") === 0)
+      ? (Math.random() < .6 ? "ghost" : "hatti")
+      : (Math.random() < .35 ? "ghost" : "hatti");
+    out.push(makeEnemy(key, i));
+  }
+  return out;
+}
+
+function startBattle(enemies, isBoss) {
+  S.battle = {
+    foes: enemies, boss: !!isBoss,
+    phase: "intro",            // intro | menu | target | skill | item | resolve | done
+    turn: 0, actorIdx: 0, order: [],
+    cursor: 0, sub: 0, targetIdx: 0,
+    msgs: [], msgT: 0,
+    result: null, anim: 0, shake: 0
+  };
+  S.party.forEach(h => { h.guard = 0; });
+  S.mode = MODE.BATTLE;
+  SFX.encounter();
+  pushMsg(enemies.length === 1
+    ? enemies[0].name + " dyker upp!"
+    : enemies.length + " fiender dyker upp!");
+}
+
+function pushMsg(text) { S.battle.msgs.push(text); }
+
+function livingFoes() { return S.battle.foes.filter(f => f.alive); }
+function livingHeroes() { return S.party.filter(h => h.alive); }
+
+function buildOrder() {
+  const B = S.battle;
+  const all = [];
+  S.party.forEach((h, i) => { if (h.alive) all.push({ side: "hero", i }); });
+  B.foes.forEach((f, i) => { if (f.alive) all.push({ side: "foe", i }); });
+  all.sort((a, b) => {
+    const A = a.side === "hero" ? S.party[a.i].agi : B.foes[a.i].agi;
+    const Bg = b.side === "hero" ? S.party[b.i].agi : B.foes[b.i].agi;
+    return Bg - A;
+  });
+  B.order = all;
+  B.actorIdx = 0;
+}
+
+function damage(atk, def, variance) {
+  const base = Math.max(1, atk * 2 - def);
+  const v = variance == null ? .18 : variance;
+  return Math.max(1, Math.round(base * (1 - v + Math.random() * v * 2)));
+}
+
+function heroAttack(h, foe) {
+  SFX.sword();
+  const dmg = damage(h.atk, foe.def);
+  foe.hp -= dmg; foe.flash = .25; foe.shake = 4;
+  pushMsg(h.name + " hugger till!\n" + foe.name + " tar " + dmg + " skada.");
+  if (foe.hp <= 0) { foe.hp = 0; foe.alive = false; pushMsg(foe.name + " föll ihop!"); }
+  if (foe.sleep > 0) foe.sleep = 0;
+}
+
+function heroSkill(h, key, targetFoe, targetHero) {
+  const sk = SKILLS[key];
+  if (h.mp < sk.mp) { pushMsg("Inte nog med MP!"); return; }
+  h.mp -= sk.mp;
+  if (key === "stot") {
+    SFX.guard();
+    h.guard = 3;
+    pushMsg("MUMIN spänner sig!\nFörsvaret steg rejält!");
+  } else if (key === "sang") {
+    SFX.heal();
+    const amt = 22 + h.lv * 4;
+    const tgt = targetHero || h;
+    const before = tgt.hp;
+    tgt.hp = Math.min(tgt.maxhp, tgt.hp + amt);
+    pushMsg("SNUSMUMRIKEN sjunger vårsång.\n" + tgt.name + " fick " + (tgt.hp - before) + " HP.");
+  } else if (key === "somn") {
+    SFX.sleep();
+    let any = 0;
+    livingFoes().forEach(f => {
+      const chance = f.boss ? .25 : .7;
+      if (Math.random() < chance) { f.sleep = 2 + ((Math.random() * 2) | 0); any++; }
+    });
+    pushMsg(any ? "Munspelet ljuder...\n" + any + " fiende(r) somnade!"
+                : "Munspelet ljuder...\nMen ingen somnade.");
+  }
+}
+
+function useItem(key, tgt) {
+  const it = ITEMS[key];
+  if (!S.bag[key]) { pushMsg("Slut på " + it.name + "!"); return false; }
+  S.bag[key]--;
+  SFX.heal();
+  if (it.hp) {
+    const before = tgt.hp;
+    tgt.hp = Math.min(tgt.maxhp, tgt.hp + it.hp);
+    pushMsg(tgt.name + " drack " + it.name + ".\n+" + (tgt.hp - before) + " HP!");
+  } else {
+    const before = tgt.mp;
+    tgt.mp = Math.min(tgt.maxmp, tgt.mp + it.mp);
+    pushMsg(tgt.name + " drack " + it.name + ".\n+" + (tgt.mp - before) + " MP!");
+  }
+  return true;
+}
+
+function foeTurn(foe) {
+  if (foe.sleep > 0) {
+    foe.sleep--;
+    pushMsg(foe.name + " sover djupt...");
+    return;
+  }
+  const targets = livingHeroes();
+  if (!targets.length) return;
+
+  let move = null;
+  const roll = Math.random();
+  let acc = 0;
+  for (const m of foe.moves) { acc += m.p; if (roll < acc) { move = m.n; break; } }
+
+  if (move === "isstorm") {
+    SFX.ice();
+    pushMsg("MÅRRAN kallar på ISSTORM!");
+    targets.forEach(h => {
+      let dmg = damage(foe.atk, h.def + (h.guard > 0 ? h.def : 0), .12);
+      dmg = Math.round(dmg * .7);
+      h.hp -= dmg;
+      if (h.hp <= 0) { h.hp = 0; h.alive = false; }
+    });
+    pushMsg("Hela laget frös till!");
+  } else if (move === "frostblick") {
+    SFX.ice();
+    const h = targets[(Math.random() * targets.length) | 0];
+    const dmg = Math.round(damage(foe.atk, h.def + (h.guard > 0 ? h.def : 0)) * 1.4);
+    h.hp -= dmg; if (h.hp <= 0) { h.hp = 0; h.alive = false; }
+    pushMsg("MÅRRAN stirrar iskallt!\n" + h.name + " tar " + dmg + " skada.");
+  } else if (move === "kyla") {
+    SFX.ice();
+    const h = targets[(Math.random() * targets.length) | 0];
+    h.def = Math.max(1, h.def - 2);
+    pushMsg("En isande kyla sprider sig.\n" + h.name + " tappade försvar!");
+  } else if (move === "frostvind") {
+    SFX.ice();
+    const h = targets[(Math.random() * targets.length) | 0];
+    const dmg = Math.round(damage(foe.atk, h.def + (h.guard > 0 ? h.def : 0)) * 1.15);
+    h.hp -= dmg; if (h.hp <= 0) { h.hp = 0; h.alive = false; }
+    pushMsg(foe.name + " blåser frostvind!\n" + h.name + " tar " + dmg + " skada.");
+  } else {
+    SFX.hurt();
+    const h = targets[(Math.random() * targets.length) | 0];
+    const dmg = damage(foe.atk, h.def + (h.guard > 0 ? h.def : 0));
+    h.hp -= dmg; if (h.hp <= 0) { h.hp = 0; h.alive = false; }
+    pushMsg(foe.name + " anfaller!\n" + h.name + " tar " + dmg + " skada.");
+  }
+  livingHeroes();
+  S.party.forEach(h => { if (h.hp <= 0) h.alive = false; });
+}
+
+/* Driver striden framåt tills den behöver input eller är slut. */
+function battleStep() {
+  const B = S.battle;
+  if (B.msgs.length) return;                    // vänta tills texten lästs
+
+  if (!livingFoes().length) { battleWin(); return; }
+  if (!livingHeroes().length) { battleLose(); return; }
+
+  if (!B.order.length || B.actorIdx >= B.order.length) {
+    buildOrder();
+    B.turn++;
+    S.party.forEach(h => { if (h.guard > 0) h.guard--; });
+  }
+
+  while (B.actorIdx < B.order.length) {
+    const a = B.order[B.actorIdx];
+    if (a.side === "hero") {
+      const h = S.party[a.i];
+      if (!h.alive) { B.actorIdx++; continue; }
+      B.phase = "menu"; B.cursor = 0; B.sub = 0;
+      return;                                    // väntar på spelaren
+    } else {
+      const f = B.foes[a.i];
+      B.actorIdx++;
+      if (!f.alive) continue;
+      foeTurn(f);
+      if (!livingHeroes().length) { battleLose(); return; }
+      return;                                    // visa meddelandet först
+    }
+  }
+  B.order = [];
+  battleStep();
+}
+
+function afterHeroAction() {
+  S.battle.actorIdx++;
+  S.battle.phase = "resolve";
+}
+
+function battleWin() {
+  const B = S.battle;
+  B.phase = "done"; B.result = "win";
+  SFX.win();
+  const xp = B.foes.reduce((s, f) => s + f.xp, 0);
+  pushMsg("Fienderna är besegrade!\n" + xp + " erfarenhetspoäng!");
+  grantXp(S.party, xp).forEach(m => pushMsg(m));
+  if (B.boss) S.marranDead = true;
+}
+function battleLose() {
+  S.battle.phase = "done"; S.battle.result = "lose";
+  SFX.lose();
+  pushMsg("Laget orkade inte mer...");
+  pushMsg("Muminmamman hittade er och\nbar hem er till Muminhuset.");
+}
+
+function endBattle() {
+  const B = S.battle;
+  const won = B.result === "win", lost = B.result === "lose", boss = B.boss;
+  S.battle = null;
+  S.mode = MODE.WORLD;
+  /* Bara ett NEDERLAG bär hem laget. Att fly ska inte straffas. */
+  if (lost) {
+    S.map = "valley"; S.px = 13; S.py = 7; S.trail = [];
+    S.party.forEach(h => { h.alive = true; h.hp = h.maxhp; h.mp = h.maxmp; h.guard = 0; });
+  } else {
+    S.party.forEach(h => { h.guard = 0; });
+    if (boss) endingScene();
+  }
+  S.steps = 0; S.nextEnc = 12 + ((Math.random() * 16) | 0);
+}
+
+function endingScene() {
+  sayAs("MUMIN", [
+    "Mårran drog sig tillbaka ut i\nsnön... och hatten står kvar.",
+    "MUMIN: \"Pappas hatt! Och hela\nvinterförrådet!\"",
+    "SNUSMUMRIKEN: \"Jag visste att\ndu klarade det, Mumin.\"",
+    "Ni bär hem hatten till\nMuminhuset. Mamma sätter på\npannkakor.",
+    "* SLUT *\nTack för att du spelade!"
+  ], () => { S.mode = MODE.END; });
+}
+
+/* ═══ 9. INMATNING ════════════════════════════════════════════════════ */
+const keys = {};
+let edge = {};
+addEventListener("keydown", e => {
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space","Enter"].indexOf(e.code) >= 0) e.preventDefault();
+  if (!keys[e.code]) edge[e.code] = true;
+  keys[e.code] = true;
+  SFX.wake();
+});
+addEventListener("keyup", e => { keys[e.code] = false; });
+function pressed(...codes) { return codes.some(c => edge[c]); }
+function held(...codes) { return codes.some(c => keys[c]); }
+
+/* ═══ 10. OVERWORLD ═══════════════════════════════════════════════════ */
+function tryMove(dx, dy) {
+  const nx = S.px + dx, ny = S.py + dy;
+  S.dir = dx < 0 ? -1 : (dx > 0 ? 1 : S.dir);
+
+  const ch = mapAt(S.map, nx, ny);
+  const ex = MAPS[S.map].exits && MAPS[S.map].exits[ch];
+  if (ex) {
+    S.trail = [];
+    S.map = ex.map; S.px = ex.x; S.py = ex.y;
+    SFX.blip();
+    return;
+  }
+  if (isSolid(S.map, nx, ny)) return;
+
+  S.trail.unshift({ x: S.px, y: S.py, dir: S.dir });
+  if (S.trail.length > 4) S.trail.pop();
+  S.px = nx; S.py = ny;
+  S.walk = (S.walk + 1) % 4;
+  SFX.step();
+
+  /* slumpmöten */
+  const t = mapAt(S.map, S.px, S.py);
+  if (ENCOUNTER.indexOf(t) >= 0 && !S.marranDead) {
+    S.steps++;
+    if (S.steps >= S.nextEnc) {
+      S.steps = 0;
+      S.nextEnc = 12 + ((Math.random() * 16) | 0);
+      startBattle(randomEncounterParty(S.map), false);
+    }
+  }
+}
+
+function interact() {
+  const fx = S.px + S.dir, fy = S.py;
+  let npc = npcAt(S.map, fx, fy) || npcAt(S.map, S.px, S.py - 1) ||
+            npcAt(S.map, S.px, S.py + 1) || npcAt(S.map, S.px - S.dir, S.py);
+  if (!npc) return;
+
+  if (npc.heal) {
+    sayAs(npc.name, npc.lines.concat(["Varsågoda — hallonsaft!\nHP och MP fylldes på."]), () => {
+      S.party.forEach(h => { h.hp = h.maxhp; h.mp = h.maxmp; h.alive = true; });
+      SFX.heal();
+    });
+    return;
+  }
+  if (npc.name === "TÄLTET" && !S.gotSomn) {
+    S.gotSomn = true;
+    const snus = S.party.find(h => h.id === "snus");
+    if (snus && snus.skills.indexOf("somn") < 0) snus.skills.push("somn");
+    sayAs(npc.name, npc.lines);
+    return;
+  }
+  sayAs(npc.name, npc.lines);
+}
+
+function checkBoss() {
+  const m = MAPS[S.map];
+  if (!m.boss || S.marranDead) return;
+  if (Math.abs(S.px - m.boss.x) <= 1 && Math.abs(S.py - m.boss.y) <= 2) {
+    sayAs("MÅRRAN", [
+      "MÅRRAN: \"...\"",
+      "Kylan biter i tassarna. Mårran\nsitter på Muminpappans hatt.",
+      "SNUSMUMRIKEN: \"Nu gäller det,\nMumin. Håll i dig!\""
+    ], () => startBattle([makeEnemy("marran", 0)], true));
+  }
+}
+
+/* ═══ 11. RITANDE ═════════════════════════════════════════════════════ */
+function drawMap() {
+  const m = MAPS[S.map];
+  for (let y = 0; y < m.rows.length; y++) {
+    for (let x = 0; x < m.rows[y].length; x++) {
+      let ch = m.rows[y][x];
+      if (m.exits && m.exits[ch]) ch = (S.map.indexOf("cave") === 0) ? "C" : "p";
+      const im = TILE_IMG[ch] || TILE_IMG["."];
+      ctx.drawImage(im, x * TS, y * TS);
+    }
+  }
+  /* NPC:er */
+  (m.npcs || []).forEach(n => {
+    if (n.sign) { return; }                       // skylten är redan en tile
+    blit(n.art, n.x * TS + 2, n.y * TS + 2, 1, false);
+  });
+  /* Mårran i grottan */
+  if (m.boss && !S.marranDead) {
+    blit("hatt", m.boss.x * TS + 3, (m.boss.y - 1) * TS + 4, 1, false);
+    blit("marran", (m.boss.x - 1) * TS + 2, m.boss.y * TS + 2, 1, false);
+  }
+  if (m.boss && S.marranDead) blit("hatt", m.boss.x * TS + 3, m.boss.y * TS + 4, 1, false);
+}
+
+function drawParty() {
+  const bob = (Math.sin(S.t * 6) > 0 && (held("ArrowLeft","ArrowRight","ArrowUp","ArrowDown","KeyW","KeyA","KeyS","KeyD"))) ? 1 : 0;
+  const f = S.trail[2] || S.trail[S.trail.length - 1];
+  if (f) blit("snus", f.x * TS + 2, f.y * TS + 2 - bob, 1, f.dir < 0);
+  blit("mumin", S.px * TS + 2, S.py * TS + 2 - bob, 1, S.dir < 0);
+}
+
+/* Ram i klassisk JRPG-stil */
+function frame(x, y, w, h) {
+  ctx.fillStyle = "rgba(14,20,40,.94)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = PAL.c; ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+  ctx.strokeStyle = PAL.a;
+  ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
+}
+
+function txt(s, x, y, col, size, align) {
+  ctx.font = (size || 8) + 'px "Press Start 2P", monospace';
+  ctx.textAlign = align || "left";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#0b1020";
+  ctx.fillText(s, x + 1, y + 1);
+  ctx.fillStyle = col || PAL[1];
+  ctx.fillText(s, x, y);
+}
+
+function drawDialog() {
+  const d = S.dlg; if (!d) return;
+  const bx = 8, by = H - 74, bw = W - 16, bh = 66;
+  frame(bx, by, bw, bh);
+  if (d.speaker) txt(d.speaker, bx + 8, by + 7, PAL[9], 7);
+  const shown = d.lines[d.i].slice(0, d.chars | 0);
+  shown.split("\n").forEach((ln, i) => txt(ln, bx + 8, by + (d.speaker ? 21 : 12) + i * 11, PAL[1], 7));
+  if (d.done && Math.sin(S.t * 8) > 0) txt("▼", bx + bw - 16, by + bh - 14, PAL[9], 7);
+}
+
+function drawWorldHud() {
+  frame(0, 0, 112, 12);
+  txt(MAPS[S.map].name, 5, 3, PAL.c, 6);
+  const h = S.party[0];
+  frame(W - 96, 0, 96, 12);
+  txt("LV" + h.lv + " HP " + h.hp + "/" + h.maxhp, W - 91, 3, PAL[1], 6);
+}
+
+/* ── Strid ── */
+function drawBattle() {
+  const B = S.battle;
+  /* bakgrund */
+  const g = ctx.createLinearGradient(0, 0, 0, 150);
+  g.addColorStop(0, "#14203c"); g.addColorStop(1, "#2a3a60");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 150);
+  ctx.fillStyle = "#3e5280"; ctx.fillRect(0, 118, W, 32);
+  ctx.fillStyle = "#4a5f92"; ctx.fillRect(0, 118, W, 2);
+  for (let i = 0; i < 26; i++) {
+    ctx.fillStyle = "rgba(220,240,255,.10)";
+    ctx.fillRect((i * 37) % W, 124 + (i * 11) % 22, 3, 1);
+  }
+
+  ctx.save();
+  if (B.shake > 0) ctx.translate((Math.random() - .5) * B.shake, (Math.random() - .5) * B.shake);
+
+  /* fiender till vänster */
+  B.foes.forEach((f, i) => {
+    if (!f.alive) return;
+    const n = B.foes.length;
+    const x = 22 + i * (n > 2 ? 46 : 58);
+    const y = 46 + (i % 2) * 14 + Math.sin(S.t * 2 + i) * 2;
+    const sx = f.shake > 0 ? (Math.random() - .5) * 5 : 0;
+    if (f.flash > 0 && (S.t * 30 | 0) % 2) ctx.globalAlpha = .45;
+    blit(f.art, x + sx, y, f.scale, false);
+    ctx.globalAlpha = 1;
+    if (f.sleep > 0) txt("Zzz", x + 10, y - 10, PAL.c, 6);
+    if (B.phase === "target" && livingFoes()[B.targetIdx] === f)
+      txt("▼", x + 14, y - 18, PAL[9], 7);
+  });
+
+  /* hjältar till höger */
+  S.party.forEach((h, i) => {
+    if (!h.alive) return;
+    const x = 226 + i * 30, y = 52 + i * 24;
+    const act = B.phase !== "resolve" && B.order[B.actorIdx] &&
+                B.order[B.actorIdx].side === "hero" && S.party[B.order[B.actorIdx].i] === h;
+    blit(h.art, x, y + (act ? -3 : 0), 2, true);
+    if (h.guard > 0) txt("◆", x + 22, y - 8, PAL.b, 6);
+  });
+  ctx.restore();
+
+  /* ── underkant: meddelande eller meny ── */
+  if (B.msgs.length) {
+    frame(4, 154, W - 8, 52);
+    B.msgs[0].split("\n").forEach((ln, i) => txt(ln, 12, 162 + i * 11, PAL[1], 7));
+    if (Math.sin(S.t * 8) > 0) txt("▼", W - 20, 192, PAL[9], 7);
+  } else if (B.phase === "menu") {
+    drawCommandMenu();
+  } else if (B.phase === "target") {
+    frame(4, 154, W - 8, 52);
+    txt("VÄLJ FIENDE", 12, 162, PAL[9], 7);
+    const f = livingFoes()[B.targetIdx];
+    if (f) txt(f.name + "  HP " + f.hp, 12, 178, PAL[1], 7);
+  } else if (B.phase === "skill") {
+    drawSkillMenu();
+  } else if (B.phase === "item") {
+    drawItemMenu();
+  } else if (B.phase === "done") {
+    frame(4, 154, W - 8, 52);
+    txt(B.result === "win" ? "SEGER!" : "NEDERLAG...", 12, 168,
+        B.result === "win" ? PAL[9] : PAL[8], 8);
+  }
+
+  drawPartyBox();
+}
+
+const CMDS = ["ANFALL", "FÄRDIGHET", "FÖREMÅL", "FLY"];
+function drawCommandMenu() {
+  frame(4, 154, 128, 82);
+  const h = S.party[S.battle.order[S.battle.actorIdx].i];
+  txt(h.name, 12, 160, PAL[9], 6);
+  CMDS.forEach((c, i) => {
+    const sel = S.battle.cursor === i;
+    txt((sel ? "▸" : " ") + c, 12, 175 + i * 14, sel ? PAL[9] : PAL[1], 7);
+  });
+}
+
+function currentSkills() {
+  const h = S.party[S.battle.order[S.battle.actorIdx].i];
+  return h.skills.map(k => ({ key: k, ...SKILLS[k] }));
+}
+function drawSkillMenu() {
+  frame(4, 154, W - 8, 82);
+  const list = currentSkills();
+  if (!list.length) { txt("Inga färdigheter.", 12, 166, PAL[1], 7); return; }
+  list.forEach((s, i) => {
+    const sel = S.battle.sub === i;
+    txt((sel ? "▸" : " ") + s.name + "  " + s.mp + "MP", 12, 162 + i * 14,
+        sel ? PAL[9] : PAL[1], 7);
+  });
+  const sel = list[Math.min(S.battle.sub, list.length - 1)];
+  txt(sel.desc, 12, 218, PAL.c, 6);
+}
+
+function bagList() {
+  return Object.keys(ITEMS).filter(k => S.bag[k] > 0).map(k => ({ key: k, ...ITEMS[k] }));
+}
+function drawItemMenu() {
+  frame(4, 154, W - 8, 82);
+  const list = bagList();
+  if (!list.length) { txt("Väskan är tom.", 12, 166, PAL[1], 7); return; }
+  list.forEach((it, i) => {
+    const sel = S.battle.sub === i;
+    txt((sel ? "▸" : " ") + it.name + "  x" + S.bag[it.key], 12, 162 + i * 14,
+        sel ? PAL[9] : PAL[1], 7);
+  });
+  const sel = list[Math.min(S.battle.sub, list.length - 1)];
+  txt(sel.desc + " — mål: " + S.party[S.battle.targetIdx % S.party.length].name, 12, 218, PAL.c, 6);
+}
+
+function drawPartyBox() {
+  const x = 140, y = 154, w = W - 144, h = 82;
+  if (S.battle.phase === "menu") frame(x, y, w, h);
+  else return;
+  S.party.forEach((p, i) => {
+    const yy = y + 8 + i * 34;
+    txt(p.name, x + 7, yy, p.alive ? PAL[1] : PAL.g, 6);
+    txt("HP " + p.hp + "/" + p.maxhp, x + 7, yy + 11, p.hp < p.maxhp * .3 ? PAL[8] : PAL.c, 6);
+    txt("MP " + p.mp + "/" + p.maxmp, x + 7, yy + 21, PAL.b, 6);
+  });
+}
+
+function drawTitle() {
+  ctx.fillStyle = "#101a33"; ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 40; i++) {
+    ctx.fillStyle = "rgba(200,225,255," + (.15 + (i % 4) * .12) + ")";
+    ctx.fillRect((i * 53) % W, (i * 31) % 120, 2, 2);
+  }
+  ctx.fillStyle = "#1d2c4e"; ctx.fillRect(0, 150, W, 90);
+  blit("mumin", 118, 150, 2, false);
+  blit("snus", 158, 150, 2, true);
+  blit("hatt", 90, 60, 2, false);
+
+  txt("MUMIN", W / 2, 22, PAL[1], 16, "center");
+  txt("JAKTEN PÅ DEN", W / 2, 46, PAL[9], 8, "center");
+  txt("STULNA HATTEN", W / 2, 60, PAL[9], 8, "center");
+  if (Math.sin(S.t * 3) > 0) txt("TRYCK Z FÖR ATT BÖRJA", W / 2, 124, PAL.c, 8, "center");
+  txt("PILTANGENTER GÅR  Z VÄLJER  X BACKAR", W / 2, 224, PAL.g, 5, "center");
+}
+
+function drawEnd() {
+  ctx.fillStyle = "#101a33"; ctx.fillRect(0, 0, W, H);
+  blit("hatt", W / 2 - 30, 40, 6, false);
+  txt("HATTEN ÄR HEMMA", W / 2, 130, PAL[9], 10, "center");
+  txt("MUMIN  LV " + S.party[0].lv, W / 2, 156, PAL[1], 7, "center");
+  txt("SNUSMUMRIKEN  LV " + S.party[1].lv, W / 2, 170, PAL[1], 7, "center");
+  if (Math.sin(S.t * 3) > 0) txt("TRYCK Z FÖR NYTT ÄVENTYR", W / 2, 204, PAL.c, 7, "center");
+}
+
+/* ═══ 12. INMATNING PER LÄGE ══════════════════════════════════════════ */
+function handleWorld() {
+  if (pressed("KeyZ", "Enter", "Space")) { interact(); return; }
+  if (S.moveCool > 0) return;
+  let dx = 0, dy = 0;
+  if (held("ArrowLeft", "KeyA")) dx = -1;
+  else if (held("ArrowRight", "KeyD")) dx = 1;
+  else if (held("ArrowUp", "KeyW")) dy = -1;
+  else if (held("ArrowDown", "KeyS")) dy = 1;
+  if (dx || dy) { tryMove(dx, dy); S.moveCool = .11; checkBoss(); }
+}
+
+function handleBattle() {
+  const B = S.battle;
+  if (B.msgs.length) {
+    if (pressed("KeyZ", "Enter", "Space")) {
+      B.msgs.shift();
+      SFX.blip();
+      if (!B.msgs.length && B.phase === "done") endBattle();
+    }
+    return;
+  }
+  if (B.phase === "done") { endBattle(); return; }
+
+  const up = pressed("ArrowUp", "KeyW"), dn = pressed("ArrowDown", "KeyS");
+  const ok = pressed("KeyZ", "Enter", "Space"), no = pressed("KeyX", "Escape", "Backspace");
+
+  if (B.phase === "menu") {
+    if (up) { B.cursor = (B.cursor + CMDS.length - 1) % CMDS.length; SFX.blip(); }
+    if (dn) { B.cursor = (B.cursor + 1) % CMDS.length; SFX.blip(); }
+    if (ok) {
+      SFX.blip();
+      if (B.cursor === 0) { B.phase = "target"; B.targetIdx = 0; B.pending = { kind: "attack" }; }
+      else if (B.cursor === 1) { B.phase = "skill"; B.sub = 0; }
+      else if (B.cursor === 2) { B.phase = "item"; B.sub = 0; B.targetIdx = 0; }
+      else {
+        const h = S.party[B.order[B.actorIdx].i];
+        if (B.boss) { pushMsg("Mårran spärrar vägen!\nDet går inte att fly."); afterHeroAction(); }
+        else if (Math.random() < .55) { pushMsg("Ni sprang undan!"); B.phase = "done"; B.result = "flee"; }
+        else { pushMsg("Ni kom inte undan!"); afterHeroAction(); }
+      }
+    }
+    return;
+  }
+
+  if (B.phase === "target") {
+    const foes = livingFoes();
+    if (up) { B.targetIdx = (B.targetIdx + foes.length - 1) % foes.length; SFX.blip(); }
+    if (dn) { B.targetIdx = (B.targetIdx + 1) % foes.length; SFX.blip(); }
+    if (no) { B.phase = "menu"; SFX.blip(); return; }
+    if (ok) {
+      const h = S.party[B.order[B.actorIdx].i];
+      const f = foes[B.targetIdx];
+      if (B.pending && B.pending.kind === "attack") heroAttack(h, f);
+      else if (B.pending && B.pending.kind === "skill") heroSkill(h, B.pending.key, f, null);
+      B.pending = null;
+      B.shake = 5;
+      afterHeroAction();
+    }
+    return;
+  }
+
+  if (B.phase === "skill") {
+    const list = currentSkills();
+    if (!list.length) { if (ok || no) B.phase = "menu"; return; }
+    if (up) { B.sub = (B.sub + list.length - 1) % list.length; SFX.blip(); }
+    if (dn) { B.sub = (B.sub + 1) % list.length; SFX.blip(); }
+    if (no) { B.phase = "menu"; SFX.blip(); return; }
+    if (ok) {
+      const h = S.party[B.order[B.actorIdx].i];
+      const s = list[B.sub];
+      if (h.mp < s.mp) { pushMsg("Inte nog med MP!"); return; }
+      if (s.key === "sang") {
+        /* läk den som behöver mest */
+        const hurt = livingHeroes().slice().sort((a, b) => (a.hp / a.maxhp) - (b.hp / b.maxhp))[0];
+        heroSkill(h, s.key, null, hurt);
+        afterHeroAction();
+      } else if (s.key === "stot") {
+        heroSkill(h, s.key, null, null);
+        afterHeroAction();
+      } else {
+        heroSkill(h, s.key, null, null);
+        afterHeroAction();
+      }
+    }
+    return;
+  }
+
+  if (B.phase === "item") {
+    const list = bagList();
+    if (!list.length) { if (ok || no) B.phase = "menu"; return; }
+    if (up) { B.sub = (B.sub + list.length - 1) % list.length; SFX.blip(); }
+    if (dn) { B.sub = (B.sub + 1) % list.length; SFX.blip(); }
+    if (pressed("ArrowLeft", "KeyA", "ArrowRight", "KeyD")) {
+      B.targetIdx = (B.targetIdx + 1) % S.party.length; SFX.blip();
+    }
+    if (no) { B.phase = "menu"; SFX.blip(); return; }
+    if (ok) {
+      const it = list[Math.min(B.sub, list.length - 1)];
+      const tgt = S.party[B.targetIdx % S.party.length];
+      if (useItem(it.key, tgt)) afterHeroAction();
+    }
+    return;
+  }
+}
+
+/* ═══ 13. LOOP ════════════════════════════════════════════════════════ */
+bakeArt();
+bakeTiles();
+S.moveCool = 0;
+
+let last = 0;
+function loop(ts) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(.05, (ts - last) / 1000 || 0);
+  last = ts;
+  S.t += dt;
+  if (S.moveCool > 0) S.moveCool -= dt;
+
+  if (pressed("KeyM")) { SFX.mute(); SFX.blip(); }
+
+  if (S.mode === MODE.TITLE) {
+    if (pressed("KeyZ", "Enter", "Space")) {
+      S = newState(); S.moveCool = 0; S.mode = MODE.WORLD;
+      SFX.blip();
+      sayAs("SNUSMUMRIKEN", [
+        "Mårran har varit här i natt.",
+        "SNUSMUMRIKEN: \"Hon tog din\npappas hatt — och hela\nvinterförrådet.\"",
+        "MUMIN: \"Då går vi. Mamma blir\nutan bär till vintern annars!\"",
+        "SNUSMUMRIKEN: \"Jag följer med.\nÖver bron, förbi bergen, in i\nMörköns isgrotta.\"",
+        "Prata med Mamma för att vila.\nTryck Z framför någon."
+      ]);
+    }
+  } else if (S.mode === MODE.END) {
+    if (pressed("KeyZ", "Enter", "Space")) { S = newState(); S.moveCool = 0; SFX.blip(); }
+  } else if (S.mode === MODE.TALK) {
+    updateDialog(dt);
+    if (pressed("KeyZ", "Enter", "Space")) advanceDialog();
+  } else if (S.mode === MODE.WORLD) {
+    handleWorld();
+  } else if (S.mode === MODE.BATTLE) {
+    const B = S.battle;
+    if (B.shake > 0) B.shake = Math.max(0, B.shake - dt * 22);
+    B.foes.forEach(f => { if (f.flash > 0) f.flash -= dt; if (f.shake > 0) f.shake -= dt * 20; });
+    handleBattle();
+    if (!B.msgs.length && (B.phase === "resolve" || B.phase === "intro")) battleStep();
+  }
+
+  /* ── rita ── */
+  ctx.fillStyle = "#0b1020"; ctx.fillRect(0, 0, W, H);
+  if (S.mode === MODE.TITLE) drawTitle();
+  else if (S.mode === MODE.END) drawEnd();
+  else if (S.mode === MODE.BATTLE) drawBattle();
+  else {
+    drawMap(); drawParty(); drawWorldHud();
+    if (S.mode === MODE.TALK) drawDialog();
+  }
+
+  edge = {};
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
