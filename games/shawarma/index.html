@@ -58,6 +58,8 @@ input.code{
   background:#0d0a14; color:var(--gold); border:3px solid #4d4260; outline:none;
 }
 input.code:focus{border-color:var(--gold)}
+input.code.name{font-size:14px; letter-spacing:3px; margin-bottom:20px}
+input.code.name::placeholder{color:#5a4d6b; letter-spacing:3px}
 .bigcode{
   font-family:var(--pixel); font-size:clamp(26px,7vw,44px); color:var(--gold);
   letter-spacing:10px; padding:20px; margin:8px 0 4px;
@@ -96,6 +98,7 @@ table.res td:last-child{text-align:right; color:var(--ink)}
   <div class="panel">
     <h1>SHAWARMA AB</h1>
     <p class="sub">rulla, fyll, servera &mdash; innan de tröttnar</p>
+    <input class="code name" id="nameIn" maxlength="10" placeholder="DITT NAMN" autocomplete="off" spellcheck="false">
     <button class="btn" id="bSolo">SPELA SOLO</button>
     <button class="btn" id="bHost">SKAPA RUM</button>
     <button class="btn alt" id="bJoin">GÅ MED I RUM</button>
@@ -103,6 +106,7 @@ table.res td:last-child{text-align:right; color:var(--ink)}
       <dt>Gå</dt><dd>WASD &middot; piltangenter</dd>
       <dt>Använd station</dt><dd>E &middot; Mellanslag</dd>
       <dt>Servera</dt><dd>gå till disken, tryck E</dd>
+      <dt>Ordning</dt><dd>spelar ingen roll &mdash; ta vad du vill</dd>
     </dl>
     <p class="hint">Rummet kopplar ihop era datorer direkt. Ingen server, inget konto &mdash; men ni måste vara online samtidigt.</p>
   </div>
@@ -139,8 +143,10 @@ table.res td:last-child{text-align:right; color:var(--ink)}
     <div class="rescore" id="endMoney">0 kr</div>
     <table class="res" id="endTable"></table>
     <p class="status" id="endRank"></p>
-    <button class="btn" id="bAgain">SPELA IGEN</button>
+    <button class="btn" id="bNext">NÄSTA SKIFT &rarr;</button>
+    <button class="btn alt" id="bAgain">BÖRJA OM FRÅN NOLL</button>
     <button class="btn alt" id="bMenu">TILL MENYN</button>
+    <p class="hint" id="endWait" style="display:none">Väntar på att värden startar nästa skift…</p>
   </div>
 </div>
 
@@ -156,6 +162,7 @@ const W = 800, H = 450;
 const cv = document.getElementById("c");
 const ctx = cv.getContext("2d");
 cv.width = W; cv.height = H;
+ctx.imageSmoothingEnabled = false;   // ikonerna ska förbli skarpa pixlar
 
 function fitCanvas(){
   const s = Math.min(window.innerWidth / W, window.innerHeight / H, 2);
@@ -177,6 +184,141 @@ const ING = {
   CHIL: {n:"Chilisås",    c:"#c62828"},
   POM:  {n:"Pommes",      c:"#f2c14e"}
 };
+
+/* ── Pixelikoner ───────────────────────────────────────────────
+   Varje ingrediens ritas som en 10×10-ruta. Tecknen slår upp en färg
+   i PAL; punkt = genomskinligt. Ritas en gång till varsin liten canvas
+   och kopieras sedan — annars blir det tusentals fillRect per bildruta. */
+const PAL = {
+  t:"#e8c07a", T:"#c79a58",      // pitabröd
+  o:"#d9a441", O:"#a87c2c",      // kyckling
+  b:"#a4593a", B:"#7d4029",      // lamm
+  g:"#5fbf52", G:"#3f8c38",      // grönt
+  r:"#e04b3a", R:"#b3392c",      // tomat
+  p:"#b48ac4",                   // rödlök
+  w:"#fdfaf0", W:"#e8e0cc",      // vitt
+  c:"#c62828", C:"#8e1b1b",      // chili
+  y:"#f2c14e", Y:"#c99a2e",      // pommes
+  d:"#3a2f28"                    // kork
+};
+
+const ICONS = {
+  PITA: ["..........",
+         "..TTTTTT..",
+         ".TttttttT.",
+         "TttttttttT",
+         "TttttttttT",
+         "TttttttttT",
+         ".TttttttT.",
+         "..TTTTTT..",
+         "..........",
+         ".........."],
+  KYCK: [".......oo.",
+         "......oooo",
+         ".....ooooo",
+         "....ooooO.",
+         "...oooooo.",
+         "..ooooo...",
+         ".ooooo....",
+         "Wwooo.....",
+         "WWo.......",
+         ".........."],
+  LAMM: ["..........",
+         ".bbbbbbbb.",
+         "bBbbbbbbBb",
+         "bbbbBBbbbb",
+         "bbBbbbbBbb",
+         "bbbbbbbbbb",
+         "bBbbbBbbBb",
+         ".bbbbbbbb.",
+         "..........",
+         ".........."],
+  SALL: ["..........",
+         "...gGg....",
+         "..gggggg..",
+         ".gggGgggg.",
+         "gggggggggg",
+         "gggGggggGg",
+         ".gggggggg.",
+         "..GGGGGG..",
+         "..........",
+         ".........."],
+  TOM:  ["....GG....",
+         "...GgG....",
+         "..rrrrrr..",
+         ".rrrrrrrr.",
+         "rrrrrrrrrr",
+         "rrRrrrrrrr",
+         ".rrrrrrrr.",
+         "..rRRRRr..",
+         "..........",
+         ".........."],
+  LOK:  ["..........",
+         "...wwww...",
+         "..wWWWWw..",
+         ".wWppppWw.",
+         ".wWppppWw.",
+         ".wWppppWw.",
+         "..wWWWWw..",
+         "...wwww...",
+         "..........",
+         ".........."],
+  VITL: ["....dd....",
+         "....ww....",
+         "...wwww...",
+         "..wwwwww..",
+         "..wWwwWw..",
+         "..wwwwww..",
+         "..wwwwww..",
+         "..wwwwww..",
+         "..WWWWWW..",
+         ".........."],
+  CHIL: ["......GG..",
+         ".....GG...",
+         "....ccc...",
+         "...ccccc..",
+         "..ccccc...",
+         "..cCccc...",
+         "..cccc....",
+         "...ccc....",
+         "....cc....",
+         ".........."],
+  POM:  ["..y.y.y...",
+         "..y.y.y...",
+         "..yyyyy...",
+         ".rrrrrrr..",
+         ".rwwwwwr..",
+         ".rrrrrrr..",
+         "..rrrrr...",
+         "..rrrrr...",
+         "...rrr....",
+         ".........."]
+};
+
+const ICON_CACHE = {};
+(function buildIcons(){
+  for(const k in ICONS){
+    const c = document.createElement("canvas");
+    c.width = 10; c.height = 10;
+    const x = c.getContext("2d");
+    const rows = ICONS[k];
+    for(let y=0;y<rows.length;y++){
+      for(let i=0;i<rows[y].length;i++){
+        const ch = rows[y][i];
+        if(ch === "." || !PAL[ch]) continue;
+        x.fillStyle = PAL[ch];
+        x.fillRect(i, y, 1, 1);
+      }
+    }
+    ICON_CACHE[k] = c;
+  }
+})();
+
+function drawIcon(k, cx, cy, s){
+  const img = ICON_CACHE[k];
+  if(!img) return;
+  ctx.drawImage(img, Math.round(cx - s/2), Math.round(cy - s/2), s, s);
+}
 
 /* ── Stationer ─────────────────────────────────── */
 /* Kolumnerna börjar under serveringszonen vid disken (y < 172), annars
@@ -203,9 +345,10 @@ const CUST_COLS = ["#7b5ea7","#3f7fbf","#c76b3f","#4f9e6a","#b4506f","#6a6f8c"];
 const SHIFT = 180;
 let G = null;
 
-function newGame(twoPlayers){
+function newGame(twoPlayers, carryMoney, shiftNo){
   return {
-    time: SHIFT, money: 0, served: 0, missed: 0, over: false,
+    time: SHIFT, money: carryMoney || 0, served: 0, missed: 0, over: false,
+    shift: shiftNo || 1,
     two: twoPlayers,
     spawnT: 2.5, nextId: 1,
     players: [ mkPlayer(240, 300, true), mkPlayer(560, 300, twoPlayers) ],
@@ -264,6 +407,25 @@ function genCode(){
 }
 let myCode = "";
 
+/* ── Namn ──────────────────────────────────────── */
+const NAMES = ["", ""];
+function cleanName(s){
+  return String(s || "").toUpperCase().replace(/[^A-ZÅÄÖ0-9 ]/g, "").trim().slice(0, 10);
+}
+function myName(){
+  return cleanName(document.getElementById("nameIn").value) || "KOCK";
+}
+try{
+  const saved = localStorage.getItem("shawarmaNamn");
+  if(saved) document.getElementById("nameIn").value = saved;
+}catch(e){}
+document.getElementById("nameIn").addEventListener("input", function(){
+  try{ localStorage.setItem("shawarmaNamn", cleanName(this.value)); }catch(e){}
+});
+function labelFor(i){
+  return NAMES[i] || (i === iAm() ? "DU" : "KOMPIS");
+}
+
 /* Gästens knappar som värden läser av */
 const remoteIn = {u:0,d:0,l:0,r:0,aSeq:0};
 let lastRemoteSeq = 0, lastLocalSeq = 0;
@@ -296,6 +458,8 @@ function startHost(){
     NET.conn = c;
     c.on("open", function(){
       NET.linked = true;
+      NAMES[0] = myName();
+      netSend({t:"hi", name: NAMES[0]});
       setStatus("hostStatus", "✓ Kompisen är ansluten!", "ok");
       document.getElementById("bStart").disabled = false;
       sfxGood();
@@ -317,9 +481,13 @@ function startHost(){
 }
 
 function onHostData(m){
-  if(m && m.t === "i"){
+  if(!m) return;
+  if(m.t === "i"){
     remoteIn.u = m.u; remoteIn.d = m.d; remoteIn.l = m.l; remoteIn.r = m.r;
     remoteIn.aSeq = m.a;
+  } else if(m.t === "hi"){
+    NAMES[1] = cleanName(m.name) || "KOMPIS";
+    setStatus("hostStatus", "✓ " + NAMES[1] + " är ansluten!", "ok");
   }
 }
 
@@ -344,6 +512,8 @@ function startJoin(code){
     c.on("open", function(){
       clearTimeout(giveUp);
       NET.linked = true;
+      NAMES[1] = myName();
+      netSend({t:"hi", name: NAMES[1]});
       setStatus("joinStatus", "✓ Ansluten! Väntar på att värden startar…", "ok");
       sfxGood();
     });
@@ -365,8 +535,11 @@ function startJoin(code){
 
 function onClientData(m){
   if(!m) return;
-  if(m.t === "go"){
-    G = newGame(true);
+  if(m.t === "hi"){
+    NAMES[0] = cleanName(m.name) || "VÄRDEN";
+    setStatus("joinStatus", "✓ Ansluten till " + NAMES[0] + ". Väntar på start…", "ok");
+  } else if(m.t === "go"){
+    G = newGame(true, m.mo, m.sh);
     showScreen(null);
     running = true;
   } else if(m.t === "s"){
@@ -486,7 +659,8 @@ function doAction(pi){
   if(slot >= 0){
     const cust = G.customers.filter(function(c){ return c.slot === slot && c.st === "wait"; })[0];
     if(!cust){ nope(p); return; }
-    if(!p.hold){ nope(p); return; }
+    /* tomhänt eller tom bricka räknas inte som ett felleverans-straff */
+    if(!p.hold || !p.hold.length){ nope(p); return; }
 
     if(orderKey(p.hold) === orderKey(cust.order)){
       const ratio = Math.max(0, cust.pat / cust.maxPat);
@@ -524,7 +698,8 @@ function doAction(pi){
       G.fry.st = "cook"; G.fry.t = 2.4;
       float(p.x, p.y-30, "fritterar…", "#ffcf5c"); sfxTimer();
     } else if(G.fry.st === "ready"){
-      if(p.hold && p.hold.indexOf("POM") < 0){
+      if(!p.hold) p.hold = [];
+      if(p.hold.indexOf("POM") < 0){
         p.hold.push("POM"); G.fry.st = "idle"; G.fry.t = 0;
         float(p.x, p.y-30, "+ Pommes", ING.POM.c); sfxPick();
       } else nope(p);
@@ -532,14 +707,15 @@ function doAction(pi){
     return;
   }
 
-  /* Vanlig ingrediens */
-  if(st.ing === "PITA"){
-    if(!p.hold){ p.hold = ["PITA"]; float(p.x, p.y-30, "+ Pita", ING.PITA.c); sfxPick(); }
-    else nope(p);
+  /* Vanlig ingrediens — ingen ordning alls, ta vad du vill när du vill.
+     Enda regeln är att samma sak inte kan läggas i två gånger. */
+  if(!p.hold) p.hold = [];
+  if(p.hold.indexOf(st.ing) >= 0){
+    nope(p);
   } else {
-    if(!p.hold){ float(p.x, p.y-30, "ta pita först!", "#ff6b5b"); sfxBad(); }
-    else if(p.hold.indexOf(st.ing) >= 0){ nope(p); }
-    else { p.hold.push(st.ing); float(p.x, p.y-30, "+ " + ING[st.ing].n, ING[st.ing].c); sfxPick(); }
+    p.hold.push(st.ing);
+    float(p.x, p.y-30, "+ " + ING[st.ing].n, ING[st.ing].c);
+    sfxPick();
   }
 }
 function nope(p){ p.flash = .2; beep(180, .07, "triangle", .04); }
@@ -550,7 +726,8 @@ function simulate(dt){
   G.time -= dt;
   if(G.time <= 0){ G.time = 0; endShift(false); return; }
 
-  const prog = 1 - G.time / SHIFT;
+  /* Svårigheten stiger under skiftet OCH för varje skift man kör vidare. */
+  const prog = Math.min(1, (1 - G.time / SHIFT) + (G.shift - 1) * .25);
 
   /* fritös */
   if(G.fry.st === "cook"){
@@ -597,9 +774,15 @@ function endShift(hostGone){
   running = false;
   if(NET.mode === "host") netSend({t:"end", mo:G.money, sv:G.served, ms:G.missed});
 
-  document.getElementById("endTitle").textContent = hostGone ? "VÄRDEN LÄMNADE" : "SKIFTET ÄR SLUT";
+  document.getElementById("endTitle").textContent =
+    hostGone ? "VÄRDEN LÄMNADE" : ("SKIFT " + G.shift + " ÄR SLUT");
   document.getElementById("endMoney").textContent = G.money + " kr";
+
+  const crew = NET.mode === "solo"
+    ? labelFor(0)
+    : (NAMES[0] || "VÄRDEN") + " & " + (NAMES[1] || "KOMPIS");
   document.getElementById("endTable").innerHTML =
+    "<tr><td>Personal</td><td>" + crew + "</td></tr>" +
     "<tr><td>Serverade rullar</td><td>" + G.served + "</td></tr>" +
     "<tr><td>Missade kunder</td><td>" + G.missed + "</td></tr>" +
     "<tr><td>Snitt per rulle</td><td>" + (G.served ? Math.round(G.money/G.served) : 0) + " kr</td></tr>";
@@ -611,7 +794,11 @@ function endShift(hostGone){
   document.getElementById("endRank").textContent = "RANG: " + rank;
   document.getElementById("endRank").className = "status ok";
 
-  document.getElementById("bAgain").style.display = (NET.mode === "client") ? "none" : "block";
+  /* Gästen bestämmer inte när nästa skift drar igång — värden gör det. */
+  const isClient = (NET.mode === "client");
+  document.getElementById("bNext").style.display  = (isClient || hostGone) ? "none" : "block";
+  document.getElementById("bAgain").style.display = (isClient || hostGone) ? "none" : "block";
+  document.getElementById("endWait").style.display = (isClient && !hostGone) ? "block" : "none";
   showScreen("scrEnd");
 }
 
@@ -667,16 +854,25 @@ function drawStation(s){
   ctx.fillStyle = "#5d5470";
   ctx.fillRect(s.x, s.y, s.w, 7);
 
-  let topCol = "#8a8199";
-  if(s.ing)   topCol = ING[s.ing].c;
-  if(s.trash) topCol = "#3c3548";
+  /* bricka */
+  let tray = "#8a8199";
+  if(s.trash) tray = "#3c3548";
   if(s.fryer){
-    topCol = (G && G.fry.st === "ready") ? "#f2c14e"
-           : (G && G.fry.st === "cook")  ? "#b07a2a"
-           : "#6b6378";
+    tray = (G && G.fry.st === "ready") ? "#f2c14e"
+         : (G && G.fry.st === "cook")  ? "#b07a2a"
+         : "#6b6378";
   }
-  ctx.fillStyle = topCol;
+  ctx.fillStyle = s.ing ? "#2b2434" : tray;
   ctx.fillRect(s.x+6, s.y+11, s.w-12, s.h-24);
+
+  /* ingrediensen syns som sig själv ovanpå brickan */
+  if(s.ing) drawIcon(s.ing, s.x + s.w/2, s.y + 11 + (s.h-24)/2, 24);
+  if(s.trash){
+    ctx.fillStyle = "#6b6378";
+    ctx.fillRect(s.x+s.w/2-9, s.y+15, 18, 14);
+    ctx.fillStyle = "#3c3548";
+    ctx.fillRect(s.x+s.w/2-11, s.y+12, 22, 4);
+  }
 
   /* fritös-status */
   if(s.fryer && G){
@@ -731,18 +927,24 @@ function drawPlayer(p, idx){
   ctx.font = '6px "Press Start 2P", monospace';
   ctx.textAlign = "center";
   ctx.fillStyle = isMe ? "#ffcf5c" : "#8f849f";
-  ctx.fillText(isMe ? "DU" : "KOMPIS", x, y+26);
+  ctx.fillText(labelFor(idx), x, y+26);
 }
 
 function drawWrap(hold, x, y){
-  const n = hold.length, w = Math.max(26, n*9 + 8);
-  ctx.fillStyle = "rgba(10,8,14,.82)";
-  ctx.fillRect(x-w/2, y-9, w, 18);
+  const n = hold.length;
+  if(!n){
+    /* tom bricka — man har börjat men inte lagt i något */
+    ctx.fillStyle = "rgba(10,8,14,.82)"; ctx.fillRect(x-13, y-9, 26, 18);
+    ctx.strokeStyle = "#5d5470"; ctx.lineWidth = 1; ctx.strokeRect(x-12.5, y-8.5, 25, 17);
+    return;
+  }
+  const w = Math.max(26, n*12 + 8);
+  ctx.fillStyle = "rgba(10,8,14,.85)";
+  ctx.fillRect(x-w/2, y-10, w, 20);
   ctx.strokeStyle = "#ffcf5c"; ctx.lineWidth = 1;
-  ctx.strokeRect(x-w/2+.5, y-8.5, w-1, 17);
+  ctx.strokeRect(x-w/2+.5, y-9.5, w-1, 19);
   for(let i=0;i<n;i++){
-    ctx.fillStyle = ING[hold[i]].c;
-    ctx.fillRect(x - w/2 + 5 + i*9, y-4, 7, 8);
+    drawIcon(hold[i], x - w/2 + 10 + i*12, y, 11);
   }
 }
 
@@ -761,20 +963,19 @@ function drawCustomer(c){
 
   if(c.st === "wait"){
     /* orderbubbla */
-    const n = c.order.length, bw = n*11 + 12;
-    const bx = x - bw/2, by = 2;
+    const n = c.order.length, bw = n*15 + 12;
+    const bx = x - bw/2, by = 0;
     ctx.fillStyle = "rgba(14,11,20,.95)";
-    ctx.fillRect(bx, by, bw, 30);
+    ctx.fillRect(bx, by, bw, 34);
     ctx.strokeStyle = "rgba(255,207,92,.5)"; ctx.lineWidth = 1;
-    ctx.strokeRect(bx+.5, by+.5, bw-1, 29);
+    ctx.strokeRect(bx+.5, by+.5, bw-1, 33);
     for(let i=0;i<n;i++){
-      ctx.fillStyle = ING[c.order[i]].c;
-      ctx.fillRect(bx + 6 + i*11, by + 5, 9, 9);
+      drawIcon(c.order[i], bx + 6 + i*15 + 7, by + 11, 14);
     }
     const r = Math.max(0, c.pat / c.maxPat);
-    ctx.fillStyle = "#332941"; ctx.fillRect(bx+6, by+19, bw-12, 5);
+    ctx.fillStyle = "#332941"; ctx.fillRect(bx+6, by+23, bw-12, 5);
     ctx.fillStyle = r > .5 ? "#6ee7a8" : (r > .22 ? "#ffcf5c" : "#ff6b5b");
-    ctx.fillRect(bx+6, by+19, (bw-12) * r, 5);
+    ctx.fillRect(bx+6, by+23, (bw-12) * r, 5);
   } else {
     ctx.font = '8px "Press Start 2P", monospace';
     ctx.textAlign = "center";
@@ -818,12 +1019,14 @@ function drawHUD(){
   ctx.fillStyle = "#ff6b5b";
   ctx.fillText(G.missed + " ✗", W - 10, 14);
 
-  /* nätstatus */
+  /* skift + nätstatus */
+  ctx.textAlign = "left";
+  ctx.font = '6px "Press Start 2P", monospace';
+  ctx.fillStyle = "#8f849f";
+  ctx.fillText("SKIFT " + G.shift, 10, 30);
   if(NET.mode !== "solo"){
-    ctx.textAlign = "left";
-    ctx.font = '6px "Press Start 2P", monospace';
     ctx.fillStyle = NET.linked ? "#38b6a0" : "#ff6b5b";
-    ctx.fillText(NET.linked ? (NET.mode === "host" ? "VÄRD ●" : "GÄST ●") : "FRÅNKOPPLAD", 10, 30);
+    ctx.fillText(NET.linked ? (NET.mode === "host" ? "VÄRD ●" : "GÄST ●") : "FRÅNKOPPLAD", 74, 30);
   }
 }
 
@@ -896,9 +1099,20 @@ function resetNet(){
   lastRemoteSeq = 0; lastLocalSeq = 0;
 }
 
+/* Startar ett skift. carry = pengar man tar med sig, shiftNo = vilket skift. */
+function launch(carry, shiftNo){
+  const two = (NET.mode === "host" && NET.linked);
+  if(NET.mode !== "client") NAMES[0] = myName();
+  if(two) netSend({t:"go", mo: carry, sh: shiftNo});
+  G = newGame(two, carry, shiftNo);
+  showScreen(null);
+  running = true;
+}
+
 document.getElementById("bSolo").onclick = function(){
   resetNet(); beep(880,.08);
-  G = newGame(false); showScreen(null); running = true;
+  NAMES[1] = "";
+  launch(0, 1);
 };
 document.getElementById("bHost").onclick = function(){
   resetNet(); beep(880,.08);
@@ -914,8 +1128,7 @@ document.getElementById("bJoin").onclick = function(){
 };
 document.getElementById("bStart").onclick = function(){
   if(!NET.linked) return;
-  netSend({t:"go"});
-  G = newGame(true); showScreen(null); running = true;
+  launch(0, 1);
 };
 document.getElementById("bConnect").onclick = function(){
   const v = document.getElementById("codeIn").value.trim().toUpperCase();
@@ -928,16 +1141,8 @@ document.getElementById("codeIn").addEventListener("keydown", function(e){
 document.getElementById("bHostBack").onclick = function(){ resetNet(); showScreen("scrMenu"); };
 document.getElementById("bJoinBack").onclick = function(){ resetNet(); showScreen("scrMenu"); };
 document.getElementById("bMenu").onclick    = function(){ resetNet(); G = null; showScreen("scrMenu"); };
-document.getElementById("bAgain").onclick   = function(){
-  if(NET.mode === "host" && NET.linked){
-    netSend({t:"go"});
-    G = newGame(true);
-  } else {
-    if(NET.mode === "host") resetNet();
-    G = newGame(false);
-  }
-  showScreen(null); running = true;
-};
+document.getElementById("bNext").onclick     = function(){ launch(G.money, G.shift + 1); };
+document.getElementById("bAgain").onclick    = function(){ launch(0, 1); };
 </script>
 </body>
 </html>
