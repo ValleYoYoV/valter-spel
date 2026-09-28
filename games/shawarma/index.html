@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SHAWARMA AB — Co-op Shawarmasimulator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23120d1a'/%3E%3Crect x='6' y='2' width='4' height='9' rx='2' fill='%23d9a441'/%3E%3Crect x='5' y='11' width='6' height='3' fill='%23e8c07a'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#ffcf5c; --mint:#38b6a0; --ink:#f3e7d3; --dim:#a3927c; --red:#e04b3a;
+  --pixel:"Press Start 2P", monospace; --term:"VT323", monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#0b0810; color:var(--ink); font-family:var(--term); font-size:20px;
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+  background-image:radial-gradient(ellipse 80% 60% at 50% 0%,#241a2e 0%,transparent 70%);
+}
+canvas{display:block; image-rendering:pixelated; background:#1a1420}
+#wrap{position:relative}
+
+/* ── Overlay-skarmar ─────────────────────────────── */
+.screen{
+  position:fixed; inset:0; z-index:50; display:none;
+  align-items:center; justify-content:center; padding:20px;
+  background:rgba(8,6,12,.93);
+}
+.screen.on{display:flex}
+.panel{
+  width:min(560px,100%); max-height:92vh; overflow:auto;
+  background:linear-gradient(180deg,#1e1628,#120d1a);
+  border:4px solid var(--gold);
+  box-shadow:0 0 0 4px #0b0810, 0 26px 70px rgba(0,0,0,.8);
+  padding:34px 32px; text-align:center;
+}
+h1{font-family:var(--pixel); font-size:clamp(15px,3.6vw,24px); color:var(--gold);
+   line-height:1.6; text-shadow:3px 3px 0 #8a2d0c; margin-bottom:6px}
+h2{font-family:var(--pixel); font-size:14px; color:var(--gold); line-height:1.7; margin-bottom:16px}
+.sub{color:var(--mint); letter-spacing:2px; margin-bottom:26px; font-size:21px}
+p.info{color:#cbbaa4; margin:14px 0; line-height:1.4}
+.btn{
+  display:block; width:100%; margin:11px 0; padding:16px;
+  font-family:var(--pixel); font-size:12px; letter-spacing:1px; cursor:pointer;
+  color:#12100a; background:linear-gradient(180deg,var(--gold),#e0a92e);
+  border:3px solid #7a5a12; box-shadow:0 5px 0 #6a4a0d;
+  transition:transform .08s, box-shadow .08s;
+}
+.btn:hover{transform:translateY(2px); box-shadow:0 3px 0 #6a4a0d}
+.btn.alt{background:linear-gradient(180deg,#3a3048,#262032); color:var(--ink); border-color:#4d4260; box-shadow:0 5px 0 #191320}
+.btn:disabled{opacity:.45; cursor:not-allowed; transform:none}
+input.code{
+  width:100%; padding:16px; margin:10px 0 4px; text-align:center;
+  font-family:var(--pixel); font-size:22px; letter-spacing:8px; text-transform:uppercase;
+  background:#0d0a14; color:var(--gold); border:3px solid #4d4260; outline:none;
+}
+input.code:focus{border-color:var(--gold)}
+.bigcode{
+  font-family:var(--pixel); font-size:clamp(26px,7vw,44px); color:var(--gold);
+  letter-spacing:10px; padding:20px; margin:8px 0 4px;
+  background:#0d0a14; border:3px dashed var(--gold);
+  text-shadow:0 0 22px rgba(255,207,92,.5);
+}
+.status{color:var(--dim); letter-spacing:2px; margin:16px 0; min-height:26px}
+.status.ok{color:var(--mint)}
+.status.err{color:var(--red)}
+.keys{display:grid; grid-template-columns:auto 1fr; gap:4px 14px; text-align:left;
+      margin:18px auto 0; max-width:340px; font-size:19px}
+.keys dt{color:var(--dim)} .keys dd{color:var(--ink)}
+.rescore{font-family:var(--pixel); font-size:30px; color:var(--mint); margin:18px 0 6px}
+table.res{width:100%; margin:14px 0; font-size:20px; border-collapse:collapse}
+table.res td{padding:5px 0; border-bottom:1px solid #2e2740; text-align:left; color:var(--dim)}
+table.res td:last-child{text-align:right; color:var(--ink)}
+.hint{font-size:18px; color:#6b5c7a; margin-top:18px; line-height:1.35}
+
+#back{
+  position:fixed; top:12px; left:12px; z-index:60;
+  font-family:var(--pixel); font-size:10px; letter-spacing:2px; text-decoration:none;
+  color:var(--gold); background:rgba(10,8,14,.85); border:2px solid var(--gold);
+  padding:7px 11px; opacity:.3; transition:opacity .2s, background .2s;
+}
+#back:hover{opacity:1; background:var(--gold); color:#12100a}
+</style>
+</head>
+<body>
+
+<a href="../../index.html" id="back">&#8592; HYLLAN</a>
+
+<div id="wrap"><canvas id="c"></canvas></div>
+
+<!-- ══ MENY ══════════════════════════════════════ -->
+<div class="screen on" id="scrMenu">
+  <div class="panel">
+    <h1>SHAWARMA AB</h1>
+    <p class="sub">rulla, fyll, servera &mdash; innan de tröttnar</p>
+    <button class="btn" id="bSolo">SPELA SOLO</button>
+    <button class="btn" id="bHost">SKAPA RUM</button>
+    <button class="btn alt" id="bJoin">GÅ MED I RUM</button>
+    <dl class="keys">
+      <dt>Gå</dt><dd>WASD &middot; piltangenter</dd>
+      <dt>Använd station</dt><dd>E &middot; Mellanslag</dd>
+      <dt>Servera</dt><dd>gå till disken, tryck E</dd>
+    </dl>
+    <p class="hint">Rummet kopplar ihop era datorer direkt. Ingen server, inget konto &mdash; men ni måste vara online samtidigt.</p>
+  </div>
+</div>
+
+<!-- ══ VÄRD ══════════════════════════════════════ -->
+<div class="screen" id="scrHost">
+  <div class="panel">
+    <h2>DIN RUMSKOD</h2>
+    <div class="bigcode" id="codeOut">····</div>
+    <p class="info">Ge koden till din kompis. Hen väljer <b>GÅ MED I RUM</b> och skriver in den.</p>
+    <p class="status" id="hostStatus">Startar rum…</p>
+    <button class="btn" id="bStart" disabled>STARTA SKIFTET</button>
+    <button class="btn alt" id="bHostBack">TILLBAKA</button>
+    <p class="hint">Du är värd. Spelet körs på din dator, så stäng inte fliken under tiden.</p>
+  </div>
+</div>
+
+<!-- ══ GÄST ══════════════════════════════════════ -->
+<div class="screen" id="scrJoin">
+  <div class="panel">
+    <h2>SKRIV IN KODEN</h2>
+    <input class="code" id="codeIn" maxlength="4" placeholder="····" autocomplete="off" spellcheck="false">
+    <p class="status" id="joinStatus"></p>
+    <button class="btn" id="bConnect">ANSLUT</button>
+    <button class="btn alt" id="bJoinBack">TILLBAKA</button>
+  </div>
+</div>
+
+<!-- ══ RESULTAT ══════════════════════════════════ -->
+<div class="screen" id="scrEnd">
+  <div class="panel">
+    <h2 id="endTitle">SKIFTET ÄR SLUT</h2>
+    <div class="rescore" id="endMoney">0 kr</div>
+    <table class="res" id="endTable"></table>
+    <p class="status" id="endRank"></p>
+    <button class="btn" id="bAgain">SPELA IGEN</button>
+    <button class="btn alt" id="bMenu">TILL MENYN</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   SHAWARMA AB — co-op shawarmasimulator
+   Nät: peer-to-peer via WebRTC (PeerJS). Värden kör simuleringen
+   och skickar lägesbilder 15 ggr/s; gästen skickar sina knappar.
+   ═══════════════════════════════════════════════════════════════ */
+
+const W = 800, H = 450;
+const cv = document.getElementById("c");
+const ctx = cv.getContext("2d");
+cv.width = W; cv.height = H;
+
+function fitCanvas(){
+  const s = Math.min(window.innerWidth / W, window.innerHeight / H, 2);
+  cv.style.width  = Math.floor(W * s) + "px";
+  cv.style.height = Math.floor(H * s) + "px";
+}
+fitCanvas();
+window.addEventListener("resize", fitCanvas);
+
+/* ── Ingredienser ──────────────────────────────── */
+const ING = {
+  PITA: {n:"Pita",        c:"#e8c07a"},
+  KYCK: {n:"Kyckling",    c:"#d9a441"},
+  LAMM: {n:"Lamm",        c:"#a4593a"},
+  SALL: {n:"Sallad",      c:"#5fbf52"},
+  TOM:  {n:"Tomat",       c:"#e04b3a"},
+  LOK:  {n:"Lök",         c:"#efe6d8"},
+  VITL: {n:"Vitlökssås",  c:"#fdfaf0"},
+  CHIL: {n:"Chilisås",    c:"#c62828"},
+  POM:  {n:"Pommes",      c:"#f2c14e"}
+};
+
+/* ── Stationer ─────────────────────────────────── */
+/* Kolumnerna börjar under serveringszonen vid disken (y < 172), annars
+   krockar "tryck E för att ta pita" med "tryck E för att servera".
+   Fritös och sopor står som öar mitt på golvet — mer rörelse, fri korridor. */
+const STATIONS = [
+  {x:14,  y:176, w:78, h:48, lab:"PITA",    ing:"PITA"},
+  {x:14,  y:238, w:78, h:48, lab:"SALLAD",  ing:"SALL"},
+  {x:14,  y:300, w:78, h:48, lab:"TOMAT",   ing:"TOM"},
+  {x:14,  y:362, w:78, h:48, lab:"LÖK",     ing:"LOK"},
+  {x:708, y:176, w:78, h:48, lab:"KYCKLING",ing:"KYCK"},
+  {x:708, y:238, w:78, h:48, lab:"LAMM",    ing:"LAMM"},
+  {x:708, y:300, w:78, h:48, lab:"VITLÖK",  ing:"VITL"},
+  {x:708, y:362, w:78, h:48, lab:"CHILI",   ing:"CHIL"},
+  {x:250, y:250, w:96, h:52, lab:"FRITÖS",  fryer:true},
+  {x:460, y:250, w:84, h:52, lab:"SOPOR",   trash:true}
+];
+
+const SLOT_X = [150, 320, 490, 660];
+const COUNTER_Y = 96, COUNTER_H = 42;
+const CUST_COLS = ["#7b5ea7","#3f7fbf","#c76b3f","#4f9e6a","#b4506f","#6a6f8c"];
+
+/* ── Speltillstånd ─────────────────────────────── */
+const SHIFT = 180;
+let G = null;
+
+function newGame(twoPlayers){
+  return {
+    time: SHIFT, money: 0, served: 0, missed: 0, over: false,
+    two: twoPlayers,
+    spawnT: 2.5, nextId: 1,
+    players: [ mkPlayer(240, 300, true), mkPlayer(560, 300, twoPlayers) ],
+    customers: [],
+    fry: {st:"idle", t:0},
+    floats: []
+  };
+}
+function mkPlayer(x, y, active){
+  return {x:x, y:y, dir:1, hold:null, active:active, bob:0, flash:0};
+}
+
+/* ── Order ─────────────────────────────────────── */
+function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function shuffled(a){
+  const b = a.slice();
+  for(let i=b.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=b[i]; b[i]=b[j]; b[j]=t; }
+  return b;
+}
+function makeOrder(prog){
+  const o = ["PITA", pick(["KYCK","LAMM"])];
+  const nVeg = 1 + Math.floor(Math.random() * (prog > .4 ? 3 : 2));
+  shuffled(["SALL","TOM","LOK"]).slice(0, nVeg).forEach(function(v){ o.push(v); });
+  const nSauce = (prog > .5 && Math.random() < .45) ? 2 : 1;
+  shuffled(["VITL","CHIL"]).slice(0, nSauce).forEach(function(s){ o.push(s); });
+  if (prog > .3 && Math.random() < .3) o.push("POM");
+  return o;
+}
+function orderKey(list){ return list.slice().sort().join(","); }
+
+/* ── Ljud ──────────────────────────────────────── */
+let AC = null;
+function beep(freq, dur, type, vol){
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || "square"; o.frequency.value = freq;
+    g.gain.value = vol || .05;
+    g.gain.exponentialRampToValueAtTime(.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  }catch(e){}
+}
+const sfxPick  = function(){ beep(660, .07); };
+const sfxGood  = function(){ beep(880, .09); setTimeout(function(){ beep(1320,.12); }, 80); };
+const sfxBad   = function(){ beep(150, .25, "sawtooth", .07); };
+const sfxTimer = function(){ beep(300, .06, "triangle", .06); };
+
+/* ── Nätverk ───────────────────────────────────── */
+const NET = { mode:"solo", peer:null, conn:null, linked:false, tries:0 };
+const CODE_ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function genCode(){
+  let s = "";
+  for(let i=0;i<4;i++) s += CODE_ABC[Math.floor(Math.random()*CODE_ABC.length)];
+  return s;
+}
+let myCode = "";
+
+/* Gästens knappar som värden läser av */
+const remoteIn = {u:0,d:0,l:0,r:0,aSeq:0};
+let lastRemoteSeq = 0, lastLocalSeq = 0;
+
+function iAm(){ return NET.mode === "client" ? 1 : 0; }
+
+function netSend(obj){
+  if(NET.conn && NET.linked){
+    try{ NET.conn.send(obj); }catch(e){}
+  }
+}
+
+/* ── Värd ──────────────────────────────────────── */
+function startHost(){
+  NET.mode = "host";
+  myCode = genCode();
+  setStatus("hostStatus", "Startar rum…", "");
+  document.getElementById("codeOut").textContent = myCode;
+
+  if(typeof Peer === "undefined"){
+    setStatus("hostStatus", "Kunde inte ladda nätverksbiblioteket. Kolla internet.", "err");
+    return;
+  }
+  NET.peer = new Peer("vsh-" + myCode, {debug:0});
+
+  NET.peer.on("open", function(){
+    setStatus("hostStatus", "Rummet är öppet. Väntar på din kompis…", "");
+  });
+  NET.peer.on("connection", function(c){
+    NET.conn = c;
+    c.on("open", function(){
+      NET.linked = true;
+      setStatus("hostStatus", "✓ Kompisen är ansluten!", "ok");
+      document.getElementById("bStart").disabled = false;
+      sfxGood();
+    });
+    c.on("data", onHostData);
+    c.on("close", function(){
+      NET.linked = false;
+      setStatus("hostStatus", "Kompisen kopplade ner.", "err");
+      document.getElementById("bStart").disabled = true;
+      if(G && !G.over) G.players[1].active = false;
+    });
+  });
+  NET.peer.on("error", function(e){
+    if(e.type === "unavailable-id" && NET.tries < 6){
+      NET.tries++; NET.peer.destroy(); startHost(); return;
+    }
+    setStatus("hostStatus", "Nätfel: " + e.type, "err");
+  });
+}
+
+function onHostData(m){
+  if(m && m.t === "i"){
+    remoteIn.u = m.u; remoteIn.d = m.d; remoteIn.l = m.l; remoteIn.r = m.r;
+    remoteIn.aSeq = m.a;
+  }
+}
+
+/* ── Gäst ──────────────────────────────────────── */
+function startJoin(code){
+  NET.mode = "client";
+  setStatus("joinStatus", "Ansluter…", "");
+
+  if(typeof Peer === "undefined"){
+    setStatus("joinStatus", "Kunde inte ladda nätverksbiblioteket. Kolla internet.", "err");
+    return;
+  }
+  NET.peer = new Peer({debug:0});
+
+  const giveUp = setTimeout(function(){
+    if(!NET.linked) setStatus("joinStatus", "Ingen kontakt. Stämmer koden? Är kompisen kvar i rummet?", "err");
+  }, 16000);
+
+  NET.peer.on("open", function(){
+    const c = NET.peer.connect("vsh-" + code, {metadata:{v:1}});
+    NET.conn = c;
+    c.on("open", function(){
+      clearTimeout(giveUp);
+      NET.linked = true;
+      setStatus("joinStatus", "✓ Ansluten! Väntar på att värden startar…", "ok");
+      sfxGood();
+    });
+    c.on("data", onClientData);
+    c.on("close", function(){
+      NET.linked = false;
+      if(G && !G.over){ endShift(true); }
+      else setStatus("joinStatus", "Värden kopplade ner.", "err");
+    });
+  });
+  NET.peer.on("error", function(e){
+    clearTimeout(giveUp);
+    const msg = (e.type === "peer-unavailable")
+      ? "Hittade inget rum med den koden."
+      : "Nätfel: " + e.type;
+    setStatus("joinStatus", msg, "err");
+  });
+}
+
+function onClientData(m){
+  if(!m) return;
+  if(m.t === "go"){
+    G = newGame(true);
+    showScreen(null);
+    running = true;
+  } else if(m.t === "s"){
+    if(G) applySnap(m);
+  } else if(m.t === "end"){
+    if(G){ G.money = m.mo; G.served = m.sv; G.missed = m.ms; }
+    endShift(false);
+  }
+}
+
+/* ── Lägesbild ─────────────────────────────────── */
+function makeSnap(){
+  return {
+    t:"s",
+    ti: Math.round(G.time*10)/10, mo:G.money, sv:G.served, ms:G.missed,
+    pl: G.players.map(function(p){
+      return [Math.round(p.x), Math.round(p.y), p.dir, p.hold, p.active?1:0];
+    }),
+    cu: G.customers.map(function(c){
+      return [c.slot, c.order, Math.round(c.pat*10)/10, c.maxPat, c.col, c.st];
+    }),
+    fr: [G.fry.st, Math.round(G.fry.t*10)/10]
+  };
+}
+function applySnap(s){
+  G.time = s.ti; G.money = s.mo; G.served = s.sv; G.missed = s.ms;
+  for(let i=0;i<2;i++){
+    const p = G.players[i], d = s.pl[i];
+    p.dir = d[2]; p.hold = d[3]; p.active = !!d[4];
+    if(i === iAm()){
+      /* egen gubbe: rör sig lokalt, rättas bara vid stor avvikelse */
+      if(Math.hypot(p.x - d[0], p.y - d[1]) > 26){ p.x = d[0]; p.y = d[1]; }
+    } else { p.x = d[0]; p.y = d[1]; }
+  }
+  G.customers = s.cu.map(function(c){
+    return {slot:c[0], order:c[1], pat:c[2], maxPat:c[3], col:c[4], st:c[5]};
+  });
+  G.fry.st = s.fr[0]; G.fry.t = s.fr[1];
+}
+
+/* ── Knappar ───────────────────────────────────── */
+const keys = {};
+let actionEdge = false;
+window.addEventListener("keydown", function(e){
+  if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].indexOf(e.code) >= 0) e.preventDefault();
+  if(!keys[e.code]){
+    if(e.code === "KeyE" || e.code === "Space"){ actionEdge = true; lastLocalSeq++; }
+  }
+  keys[e.code] = true;
+});
+window.addEventListener("keyup", function(e){ keys[e.code] = false; });
+
+function readLocal(){
+  return {
+    u: (keys.KeyW || keys.ArrowUp)    ? 1 : 0,
+    d: (keys.KeyS || keys.ArrowDown)  ? 1 : 0,
+    l: (keys.KeyA || keys.ArrowLeft)  ? 1 : 0,
+    r: (keys.KeyD || keys.ArrowRight) ? 1 : 0
+  };
+}
+
+/* ── Rörelse & kollision ───────────────────────── */
+const SPEED = 152;
+const BOUND = {x0:10, x1:W-10, y0:COUNTER_Y+COUNTER_H+4, y1:H-10};
+
+function hitsStation(x, y){
+  for(let i=0;i<STATIONS.length;i++){
+    const s = STATIONS[i];
+    if(x+9 > s.x && x-9 < s.x+s.w && y+9 > s.y && y-9 < s.y+s.h) return true;
+  }
+  return false;
+}
+function movePlayer(p, inp, dt){
+  let dx = inp.r - inp.l, dy = inp.d - inp.u;
+  if(dx && dy){ const k = .7071; dx *= k; dy *= k; }
+  if(dx) p.dir = dx > 0 ? 1 : -1;
+
+  const nx = p.x + dx * SPEED * dt;
+  if(nx > BOUND.x0 && nx < BOUND.x1 && !hitsStation(nx, p.y)) p.x = nx;
+  const ny = p.y + dy * SPEED * dt;
+  if(ny > BOUND.y0 && ny < BOUND.y1 && !hitsStation(p.x, ny)) p.y = ny;
+
+  if(dx || dy) p.bob += dt * 11; else p.bob = 0;
+}
+
+/* ── Vad står spelaren vid? ────────────────────── */
+function nearStation(p){
+  /* Tar alltid den närmaste, så en generös radie är säker — den gör bara
+     räckvidden förlåtande utan att kunna välja fel station. */
+  let best = null, bd = 72;
+  for(let i=0;i<STATIONS.length;i++){
+    const s = STATIONS[i];
+    const cx = s.x + s.w/2, cy = s.y + s.h/2;
+    const d = Math.hypot(p.x - cx, p.y - cy);
+    if(d < bd){ bd = d; best = s; }
+  }
+  return best;
+}
+function nearSlot(p){
+  /* Smal remsa direkt under disken. Måste sluta med marginal ovanför
+     översta stationen (y=176): en spelare som står tätt intill den hamnar
+     på y=167, och får INTE räknas som stående vid disken. */
+  if(p.y > BOUND.y0 + 18) return -1;
+  for(let i=0;i<4;i++){
+    if(Math.abs(p.x - SLOT_X[i]) < 58) return i;
+  }
+  return -1;
+}
+
+/* ── Handling (bara värden kör detta) ──────────── */
+function doAction(pi){
+  const p = G.players[pi];
+  if(!p.active) return;
+
+  /* Servera? */
+  const slot = nearSlot(p);
+  if(slot >= 0){
+    const cust = G.customers.filter(function(c){ return c.slot === slot && c.st === "wait"; })[0];
+    if(!cust){ nope(p); return; }
+    if(!p.hold){ nope(p); return; }
+
+    if(orderKey(p.hold) === orderKey(cust.order)){
+      const ratio = Math.max(0, cust.pat / cust.maxPat);
+      const base  = 40 + 8 * cust.order.length;
+      const tip   = Math.round(30 * ratio);
+      G.money += base + tip;
+      G.served++;
+      cust.st = "happy"; cust.pat = 1.1;
+      float(SLOT_X[slot], 70, "+" + (base + tip) + " kr", "#6ee7a8");
+      if(tip > 18) float(SLOT_X[slot], 52, "SNABBT! +" + tip, "#ffcf5c");
+      sfxGood();
+    } else {
+      G.money = Math.max(0, G.money - 15);
+      G.missed++;
+      cust.st = "angry"; cust.pat = 1.1;
+      float(SLOT_X[slot], 70, "FEL RULLE! −15 kr", "#ff6b5b");
+      sfxBad();
+    }
+    p.hold = null; p.flash = .25;
+    return;
+  }
+
+  /* Station? */
+  const st = nearStation(p);
+  if(!st){ nope(p); return; }
+
+  if(st.trash){
+    if(p.hold){ p.hold = null; float(p.x, p.y-30, "slängd", "#a3927c"); beep(200,.1,"triangle"); }
+    else nope(p);
+    return;
+  }
+
+  if(st.fryer){
+    if(G.fry.st === "idle"){
+      G.fry.st = "cook"; G.fry.t = 2.4;
+      float(p.x, p.y-30, "fritterar…", "#ffcf5c"); sfxTimer();
+    } else if(G.fry.st === "ready"){
+      if(p.hold && p.hold.indexOf("POM") < 0){
+        p.hold.push("POM"); G.fry.st = "idle"; G.fry.t = 0;
+        float(p.x, p.y-30, "+ Pommes", ING.POM.c); sfxPick();
+      } else nope(p);
+    } else nope(p);
+    return;
+  }
+
+  /* Vanlig ingrediens */
+  if(st.ing === "PITA"){
+    if(!p.hold){ p.hold = ["PITA"]; float(p.x, p.y-30, "+ Pita", ING.PITA.c); sfxPick(); }
+    else nope(p);
+  } else {
+    if(!p.hold){ float(p.x, p.y-30, "ta pita först!", "#ff6b5b"); sfxBad(); }
+    else if(p.hold.indexOf(st.ing) >= 0){ nope(p); }
+    else { p.hold.push(st.ing); float(p.x, p.y-30, "+ " + ING[st.ing].n, ING[st.ing].c); sfxPick(); }
+  }
+}
+function nope(p){ p.flash = .2; beep(180, .07, "triangle", .04); }
+function float(x, y, txt, col){ G.floats.push({x:x, y:y, txt:txt, col:col, life:1.3}); }
+
+/* ── Simulering (värd/solo) ────────────────────── */
+function simulate(dt){
+  G.time -= dt;
+  if(G.time <= 0){ G.time = 0; endShift(false); return; }
+
+  const prog = 1 - G.time / SHIFT;
+
+  /* fritös */
+  if(G.fry.st === "cook"){
+    G.fry.t -= dt;
+    if(G.fry.t <= 0){ G.fry.st = "ready"; G.fry.t = 0; beep(990,.1); }
+  }
+
+  /* nya kunder */
+  G.spawnT -= dt;
+  if(G.spawnT <= 0){
+    const taken = G.customers.map(function(c){ return c.slot; });
+    const free = [0,1,2,3].filter(function(s){ return taken.indexOf(s) < 0; });
+    if(free.length){
+      const pat = 46 - 16 * prog;
+      G.customers.push({
+        slot: pick(free), order: makeOrder(prog),
+        pat: pat, maxPat: pat,
+        col: Math.floor(Math.random() * CUST_COLS.length), st: "wait"
+      });
+      beep(520, .05, "sine", .04);
+    }
+    G.spawnT = Math.max(2.6, 7.5 - 4 * prog) * (.75 + Math.random() * .5);
+  }
+
+  /* kunder tickar */
+  for(let i=G.customers.length-1;i>=0;i--){
+    const c = G.customers[i];
+    if(c.st === "wait"){
+      c.pat -= dt;
+      if(c.pat <= 0){
+        c.st = "angry"; c.pat = 1.1; G.missed++;
+        float(SLOT_X[c.slot], 70, "TRÖTTNADE", "#ff6b5b"); sfxBad();
+      }
+    } else {
+      c.pat -= dt;
+      if(c.pat <= 0) G.customers.splice(i, 1);
+    }
+  }
+}
+
+/* ── Slut ──────────────────────────────────────── */
+function endShift(hostGone){
+  if(G) G.over = true;
+  running = false;
+  if(NET.mode === "host") netSend({t:"end", mo:G.money, sv:G.served, ms:G.missed});
+
+  document.getElementById("endTitle").textContent = hostGone ? "VÄRDEN LÄMNADE" : "SKIFTET ÄR SLUT";
+  document.getElementById("endMoney").textContent = G.money + " kr";
+  document.getElementById("endTable").innerHTML =
+    "<tr><td>Serverade rullar</td><td>" + G.served + "</td></tr>" +
+    "<tr><td>Missade kunder</td><td>" + G.missed + "</td></tr>" +
+    "<tr><td>Snitt per rulle</td><td>" + (G.served ? Math.round(G.money/G.served) : 0) + " kr</td></tr>";
+
+  let rank = "PRAKTIKANT";
+  if(G.money > 400)  rank = "RULLARE";
+  if(G.money > 900)  rank = "MÄSTARE VID SPETTET";
+  if(G.money > 1500) rank = "SHAWARMALEGEND";
+  document.getElementById("endRank").textContent = "RANG: " + rank;
+  document.getElementById("endRank").className = "status ok";
+
+  document.getElementById("bAgain").style.display = (NET.mode === "client") ? "none" : "block";
+  showScreen("scrEnd");
+}
+
+/* ── Rendering ─────────────────────────────────── */
+function px(n){ return Math.round(n); }
+
+function draw(){
+  /* golv */
+  ctx.fillStyle = "#2b2233";
+  ctx.fillRect(0, 0, W, H);
+  for(let y=BOUND.y0-4; y<H; y+=32){
+    for(let x=0; x<W; x+=32){
+      ctx.fillStyle = ((x/32 + y/32) | 0) % 2 ? "#332941" : "#2c2337";
+      ctx.fillRect(x, y, 32, 32);
+    }
+  }
+
+  drawCounter();
+  for(let i=0;i<STATIONS.length;i++) drawStation(STATIONS[i]);
+  if(G){
+    G.customers.forEach(drawCustomer);
+    /* rita bakre spelaren först */
+    const order = G.players.map(function(p,i){ return i; })
+                           .sort(function(a,b){ return G.players[a].y - G.players[b].y; });
+    order.forEach(function(i){ if(G.players[i].active) drawPlayer(G.players[i], i); });
+    drawFloats();
+    drawHUD();
+  }
+}
+
+function drawCounter(){
+  ctx.fillStyle = "#1d1726"; ctx.fillRect(0, 0, W, COUNTER_Y);
+  ctx.fillStyle = "#6d4423";
+  ctx.fillRect(0, COUNTER_Y, W, COUNTER_H);
+  ctx.fillStyle = "#9a6636"; ctx.fillRect(0, COUNTER_Y, W, 6);
+  ctx.fillStyle = "#4a2c15"; ctx.fillRect(0, COUNTER_Y+COUNTER_H-5, W, 5);
+  for(let x=0;x<W;x+=4){
+    ctx.fillStyle = "rgba(0,0,0,.10)";
+    if((x/4)%3===0) ctx.fillRect(x, COUNTER_Y+6, 2, COUNTER_H-11);
+  }
+  /* luckor */
+  for(let i=0;i<4;i++){
+    ctx.strokeStyle = "rgba(255,207,92,.28)"; ctx.lineWidth = 2;
+    ctx.strokeRect(SLOT_X[i]-56, COUNTER_Y+5, 112, COUNTER_H-10);
+  }
+}
+
+function drawStation(s){
+  ctx.fillStyle = "#151020";
+  ctx.fillRect(s.x+3, s.y+5, s.w, s.h);
+  ctx.fillStyle = "#4a4258";
+  ctx.fillRect(s.x, s.y, s.w, s.h);
+  ctx.fillStyle = "#5d5470";
+  ctx.fillRect(s.x, s.y, s.w, 7);
+
+  let topCol = "#8a8199";
+  if(s.ing)   topCol = ING[s.ing].c;
+  if(s.trash) topCol = "#3c3548";
+  if(s.fryer){
+    topCol = (G && G.fry.st === "ready") ? "#f2c14e"
+           : (G && G.fry.st === "cook")  ? "#b07a2a"
+           : "#6b6378";
+  }
+  ctx.fillStyle = topCol;
+  ctx.fillRect(s.x+6, s.y+11, s.w-12, s.h-24);
+
+  /* fritös-status */
+  if(s.fryer && G){
+    if(G.fry.st === "cook"){
+      const p = 1 - G.fry.t / 2.4;
+      ctx.fillStyle = "#1d1726"; ctx.fillRect(s.x+8, s.y+s.h-19, s.w-16, 7);
+      ctx.fillStyle = "#ffcf5c"; ctx.fillRect(s.x+8, s.y+s.h-19, (s.w-16)*p, 7);
+    } else if(G.fry.st === "ready"){
+      ctx.fillStyle = "#12100a";
+      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.textAlign = "center";
+      ctx.fillText("KLAR!", s.x+s.w/2, s.y+s.h/2+3);
+    }
+  }
+
+  ctx.fillStyle = "#e8dcc8";
+  ctx.font = '7px "Press Start 2P", monospace';
+  ctx.textAlign = "center";
+  ctx.fillText(s.lab, s.x + s.w/2, s.y + s.h - 5);
+}
+
+function drawPlayer(p, idx){
+  const isMe = (idx === iAm());
+  const body = idx === 0 ? "#e07a3c" : "#37a6a0";
+  const bob  = Math.sin(p.bob) * 2;
+  const x = px(p.x), y = px(p.y + bob);
+
+  ctx.fillStyle = "rgba(0,0,0,.3)";
+  ctx.beginPath(); ctx.ellipse(x, p.y+12, 12, 5, 0, 0, 6.3); ctx.fill();
+
+  /* förkläde + kropp */
+  ctx.fillStyle = body;      ctx.fillRect(x-9, y-8, 18, 20);
+  ctx.fillStyle = "#f0e6d2"; ctx.fillRect(x-6, y+1, 12, 11);
+  /* huvud */
+  ctx.fillStyle = "#e8b88a"; ctx.fillRect(x-7, y-21, 14, 14);
+  /* mössa */
+  ctx.fillStyle = "#f5f0e6"; ctx.fillRect(x-8, y-26, 16, 6);
+  /* ögon */
+  ctx.fillStyle = "#231c2e";
+  ctx.fillRect(x + (p.dir > 0 ? 0 : -4), y-16, 2, 3);
+  ctx.fillRect(x + (p.dir > 0 ? 4 : -1), y-16, 2, 3);
+
+  if(p.flash > 0){
+    ctx.fillStyle = "rgba(255,90,70," + (p.flash*2.2) + ")";
+    ctx.fillRect(x-10, y-27, 20, 40);
+  }
+
+  /* bricka med rullen */
+  if(p.hold) drawWrap(p.hold, x, y-40);
+
+  /* etikett */
+  ctx.font = '6px "Press Start 2P", monospace';
+  ctx.textAlign = "center";
+  ctx.fillStyle = isMe ? "#ffcf5c" : "#8f849f";
+  ctx.fillText(isMe ? "DU" : "KOMPIS", x, y+26);
+}
+
+function drawWrap(hold, x, y){
+  const n = hold.length, w = Math.max(26, n*9 + 8);
+  ctx.fillStyle = "rgba(10,8,14,.82)";
+  ctx.fillRect(x-w/2, y-9, w, 18);
+  ctx.strokeStyle = "#ffcf5c"; ctx.lineWidth = 1;
+  ctx.strokeRect(x-w/2+.5, y-8.5, w-1, 17);
+  for(let i=0;i<n;i++){
+    ctx.fillStyle = ING[hold[i]].c;
+    ctx.fillRect(x - w/2 + 5 + i*9, y-4, 7, 8);
+  }
+}
+
+function drawCustomer(c){
+  const x = SLOT_X[c.slot], y = 58;
+  const col = CUST_COLS[c.col];
+
+  if(c.st === "happy")      ctx.globalAlpha = Math.min(1, c.pat + .2);
+  else if(c.st === "angry") ctx.globalAlpha = Math.min(1, c.pat + .2);
+
+  ctx.fillStyle = col;       ctx.fillRect(x-10, y-6, 20, 22);
+  ctx.fillStyle = "#e8b88a"; ctx.fillRect(x-8, y-20, 16, 15);
+  ctx.fillStyle = "#231c2e";
+  if(c.st === "angry"){ ctx.fillRect(x-5, y-14, 3, 2); ctx.fillRect(x+2, y-14, 3, 2); ctx.fillRect(x-4, y-9, 8, 2); }
+  else { ctx.fillRect(x-5, y-15, 3, 3); ctx.fillRect(x+2, y-15, 3, 3); ctx.fillRect(x-3, y-9, 6, 2); }
+
+  if(c.st === "wait"){
+    /* orderbubbla */
+    const n = c.order.length, bw = n*11 + 12;
+    const bx = x - bw/2, by = 2;
+    ctx.fillStyle = "rgba(14,11,20,.95)";
+    ctx.fillRect(bx, by, bw, 30);
+    ctx.strokeStyle = "rgba(255,207,92,.5)"; ctx.lineWidth = 1;
+    ctx.strokeRect(bx+.5, by+.5, bw-1, 29);
+    for(let i=0;i<n;i++){
+      ctx.fillStyle = ING[c.order[i]].c;
+      ctx.fillRect(bx + 6 + i*11, by + 5, 9, 9);
+    }
+    const r = Math.max(0, c.pat / c.maxPat);
+    ctx.fillStyle = "#332941"; ctx.fillRect(bx+6, by+19, bw-12, 5);
+    ctx.fillStyle = r > .5 ? "#6ee7a8" : (r > .22 ? "#ffcf5c" : "#ff6b5b");
+    ctx.fillRect(bx+6, by+19, (bw-12) * r, 5);
+  } else {
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = "center";
+    ctx.fillStyle = c.st === "happy" ? "#6ee7a8" : "#ff6b5b";
+    ctx.fillText(c.st === "happy" ? "TACK!" : "USCH!", x, 22);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFloats(){
+  ctx.textAlign = "center";
+  ctx.font = '8px "Press Start 2P", monospace';
+  for(let i=0;i<G.floats.length;i++){
+    const f = G.floats[i];
+    ctx.globalAlpha = Math.min(1, f.life);
+    ctx.fillStyle = "#0b0810";
+    ctx.fillText(f.txt, f.x+1, f.y+1);
+    ctx.fillStyle = f.col;
+    ctx.fillText(f.txt, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD(){
+  ctx.fillStyle = "rgba(11,8,16,.88)";
+  ctx.fillRect(0, 0, W, 20);
+  ctx.font = '9px "Press Start 2P", monospace';
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffcf5c";
+  ctx.fillText(G.money + " kr", 10, 14);
+
+  ctx.textAlign = "center";
+  const m = Math.floor(G.time / 60), s = Math.floor(G.time % 60);
+  ctx.fillStyle = G.time < 30 ? "#ff6b5b" : "#f3e7d3";
+  ctx.fillText(m + ":" + (s < 10 ? "0" : "") + s, W/2, 14);
+
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#6ee7a8";
+  ctx.fillText(G.served + " ✓", W - 66, 14);
+  ctx.fillStyle = "#ff6b5b";
+  ctx.fillText(G.missed + " ✗", W - 10, 14);
+
+  /* nätstatus */
+  if(NET.mode !== "solo"){
+    ctx.textAlign = "left";
+    ctx.font = '6px "Press Start 2P", monospace';
+    ctx.fillStyle = NET.linked ? "#38b6a0" : "#ff6b5b";
+    ctx.fillText(NET.linked ? (NET.mode === "host" ? "VÄRD ●" : "GÄST ●") : "FRÅNKOPPLAD", 10, 30);
+  }
+}
+
+/* ── Loop ──────────────────────────────────────── */
+let running = false, last = 0, sendT = 0, inpT = 0;
+
+function frame(ts){
+  requestAnimationFrame(frame);
+  const dt = Math.min(.05, (ts - last) / 1000 || 0);
+  last = ts;
+  if(!running || !G){ draw(); return; }
+
+  const me = G.players[iAm()];
+  const inp = readLocal();
+
+  if(NET.mode === "client"){
+    /* egen gubbe lokalt så det känns direkt */
+    if(me.active) movePlayer(me, inp, dt);
+    inpT -= dt;
+    if(inpT <= 0){
+      netSend({t:"i", u:inp.u, d:inp.d, l:inp.l, r:inp.r, a:lastLocalSeq});
+      inpT = 1/20;
+    }
+    actionEdge = false;
+  } else {
+    /* värd/solo: kör hela simuleringen */
+    if(G.players[0].active) movePlayer(G.players[0], inp, dt);
+    if(actionEdge){ doAction(0); actionEdge = false; }
+
+    if(NET.mode === "host" && G.players[1].active){
+      movePlayer(G.players[1], remoteIn, dt);
+      if(remoteIn.aSeq > lastRemoteSeq){ lastRemoteSeq = remoteIn.aSeq; doAction(1); }
+    }
+    simulate(dt);
+
+    if(NET.mode === "host"){
+      sendT -= dt;
+      if(sendT <= 0){ netSend(makeSnap()); sendT = 1/15; }
+    }
+  }
+
+  /* lokala effekter */
+  for(let i=0;i<2;i++){ if(G.players[i].flash > 0) G.players[i].flash -= dt; }
+  for(let i=G.floats.length-1;i>=0;i--){
+    const f = G.floats[i];
+    f.y -= 22 * dt; f.life -= dt;
+    if(f.life <= 0) G.floats.splice(i, 1);
+  }
+  if(NET.mode === "client"){ me.bob += 0; }
+
+  draw();
+}
+requestAnimationFrame(frame);
+
+/* ── Skärmar ───────────────────────────────────── */
+function showScreen(id){
+  ["scrMenu","scrHost","scrJoin","scrEnd"].forEach(function(s){
+    document.getElementById(s).classList.toggle("on", s === id);
+  });
+}
+function setStatus(id, txt, cls){
+  const e = document.getElementById(id);
+  e.textContent = txt;
+  e.className = "status" + (cls ? " " + cls : "");
+}
+function resetNet(){
+  try{ if(NET.conn) NET.conn.close(); }catch(e){}
+  try{ if(NET.peer) NET.peer.destroy(); }catch(e){}
+  NET.mode = "solo"; NET.peer = null; NET.conn = null; NET.linked = false; NET.tries = 0;
+  lastRemoteSeq = 0; lastLocalSeq = 0;
+}
+
+document.getElementById("bSolo").onclick = function(){
+  resetNet(); beep(880,.08);
+  G = newGame(false); showScreen(null); running = true;
+};
+document.getElementById("bHost").onclick = function(){
+  resetNet(); beep(880,.08);
+  document.getElementById("bStart").disabled = true;
+  showScreen("scrHost"); startHost();
+};
+document.getElementById("bJoin").onclick = function(){
+  resetNet(); beep(880,.08);
+  setStatus("joinStatus", "", "");
+  showScreen("scrJoin");
+  document.getElementById("codeIn").value = "";
+  document.getElementById("codeIn").focus();
+};
+document.getElementById("bStart").onclick = function(){
+  if(!NET.linked) return;
+  netSend({t:"go"});
+  G = newGame(true); showScreen(null); running = true;
+};
+document.getElementById("bConnect").onclick = function(){
+  const v = document.getElementById("codeIn").value.trim().toUpperCase();
+  if(v.length !== 4){ setStatus("joinStatus", "Koden är fyra tecken.", "err"); return; }
+  startJoin(v);
+};
+document.getElementById("codeIn").addEventListener("keydown", function(e){
+  if(e.key === "Enter") document.getElementById("bConnect").click();
+});
+document.getElementById("bHostBack").onclick = function(){ resetNet(); showScreen("scrMenu"); };
+document.getElementById("bJoinBack").onclick = function(){ resetNet(); showScreen("scrMenu"); };
+document.getElementById("bMenu").onclick    = function(){ resetNet(); G = null; showScreen("scrMenu"); };
+document.getElementById("bAgain").onclick   = function(){
+  if(NET.mode === "host" && NET.linked){
+    netSend({t:"go"});
+    G = newGame(true);
+  } else {
+    if(NET.mode === "host") resetNet();
+    G = newGame(false);
+  }
+  showScreen(null); running = true;
+};
+</script>
+</body>
+</html>
