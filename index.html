@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Valter Spel — Spelkatalog</title>
+<meta name="description" content="Valter Spel — en retro spelkatalog. Plocka en bok från hyllan och spela direkt i webbläsaren.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230d0b0f'/%3E%3Crect x='2' y='3' width='3' height='10' fill='%23c8451f'/%3E%3Crect x='6' y='4' width='3' height='9' fill='%23ffcf5c'/%3E%3Crect x='10' y='2' width='3' height='11' fill='%2338b6a0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#f3e7d3; --ink-dim:#a3927c; --gold:#ffcf5c; --mint:#38b6a0;
+  --room1:#17121c; --room2:#0b0810;
+  --wood1:#9a6636; --wood2:#6d4423; --wood3:#4a2c15; --wood-dark:#331d0d;
+  --pixel:"Press Start 2P", monospace;
+  --term:"VT323", monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  min-height:100vh; background:var(--room2); color:var(--ink);
+  font-family:var(--term); font-size:20px; line-height:1.45;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 0%, #241a2e 0%, transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 100%, #1a1322 0%, transparent 70%),
+    linear-gradient(180deg,var(--room1),var(--room2));
+  background-attachment:fixed;
+  padding:0 0 80px;
+}
+
+/* ── CRT-lager ───────────────────────────────────────── */
+.crt{position:fixed;inset:0;pointer-events:none;z-index:900}
+.crt::before{
+  content:"";position:absolute;inset:0;
+  background:repeating-linear-gradient(180deg,rgba(0,0,0,.28) 0 1px,transparent 1px 3px);
+  opacity:.55;
+}
+.crt::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse 75% 65% at 50% 50%,transparent 45%,rgba(0,0,0,.75) 100%);
+}
+@keyframes boot{0%{opacity:0;transform:scaleY(.4)}40%{opacity:1}55%{opacity:.7}100%{opacity:1;transform:scaleY(1)}}
+.boot{animation:boot .7s ease-out both}
+
+/* ── Skylt ───────────────────────────────────────────── */
+header{text-align:center;padding:56px 20px 14px;position:relative;z-index:2}
+.sign{
+  display:inline-block;padding:22px 40px;position:relative;
+  background:linear-gradient(180deg,#241a30,#150f1e);
+  border:4px solid var(--gold);
+  box-shadow:0 0 0 4px #0b0810, 0 0 34px rgba(255,207,92,.28), inset 0 0 26px rgba(255,207,92,.09);
+}
+.sign::before,.sign::after{
+  content:"";position:absolute;top:-30px;width:3px;height:30px;
+  background:linear-gradient(180deg,transparent,#5a4a35);
+}
+.sign::before{left:24px}
+.sign::after{right:24px}
+h1{
+  font-family:var(--pixel);font-size:clamp(17px,4.4vw,34px);color:var(--gold);
+  letter-spacing:2px;line-height:1.35;
+  text-shadow:3px 3px 0 #8a2d0c, 0 0 22px rgba(255,207,92,.45);
+}
+.tagline{margin-top:12px;font-size:21px;color:var(--ink-dim);letter-spacing:3px;text-transform:uppercase}
+.tagline b{color:var(--mint);font-weight:normal}
+
+/* ── Hyllan ──────────────────────────────────────────── */
+main{max-width:1040px;margin:34px auto 0;padding:0 20px;position:relative;z-index:2}
+.case{
+  background:linear-gradient(180deg,#1d1526,#120d1a);
+  border:5px solid var(--wood-dark);
+  padding:18px 16px 8px;
+  box-shadow:0 26px 70px rgba(0,0,0,.75), inset 0 0 70px rgba(0,0,0,.65);
+  position:relative;
+}
+.case::before{
+  content:"";position:absolute;left:-5px;right:-5px;top:-18px;height:13px;
+  background:
+    repeating-linear-gradient(90deg,rgba(0,0,0,.16) 0 2px,transparent 2px 8px),
+    linear-gradient(180deg,var(--wood1),var(--wood2));
+  border:3px solid var(--wood-dark);
+}
+.shelf{margin-bottom:8px}
+.books{
+  display:flex;align-items:flex-end;gap:7px;flex-wrap:wrap;
+  padding:0 12px;min-height:180px;
+}
+.plank{
+  height:16px;margin-top:-2px;
+  background:
+    repeating-linear-gradient(90deg,rgba(0,0,0,.18) 0 2px,transparent 2px 9px),
+    linear-gradient(180deg,var(--wood1) 0 5px,var(--wood2) 5px 11px,var(--wood3) 11px 100%);
+  border:2px solid var(--wood-dark);
+  box-shadow:0 7px 16px rgba(0,0,0,.6);
+}
+
+/* ── Böcker = spel ───────────────────────────────────── */
+.book{
+  position:relative;flex:0 0 auto;cursor:pointer;
+  border:none;padding:12px 4px;color:#fff;font-family:var(--pixel);
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  border-radius:2px 2px 0 0;
+  transform-origin:bottom center;
+  transition:transform .18s cubic-bezier(.3,1.4,.5,1), box-shadow .18s, filter .18s;
+  box-shadow:inset -7px 0 12px rgba(0,0,0,.42), inset 5px 0 8px rgba(255,255,255,.11), 3px 5px 12px rgba(0,0,0,.55);
+}
+.book::before,.book::after{
+  content:"";position:absolute;left:0;right:0;height:5px;
+  background:linear-gradient(90deg,transparent,var(--bk-accent),transparent);opacity:.9;
+}
+.book::before{top:24px}
+.book::after{bottom:24px}
+.book .t{
+  writing-mode:vertical-rl;text-orientation:mixed;
+  font-size:9px;letter-spacing:2px;line-height:1.6;
+  text-shadow:1px 1px 0 rgba(0,0,0,.65);
+  margin:6px 0;flex:1;display:flex;align-items:center;
+}
+.book .yr{font-size:7px;color:var(--bk-accent);letter-spacing:1px;opacity:.95}
+.book .dot{width:7px;height:7px;background:var(--bk-accent);border-radius:50%;box-shadow:0 0 7px var(--bk-accent)}
+.book:hover,.book:focus-visible{
+  transform:translateY(-16px) rotate(-3.5deg);
+  box-shadow:inset -7px 0 12px rgba(0,0,0,.42), inset 5px 0 8px rgba(255,255,255,.14), 10px 16px 28px rgba(0,0,0,.7), 0 0 26px var(--bk-glow);
+  filter:brightness(1.14);outline:none;
+}
+.book.empty{
+  background:transparent;border:2px dashed #3d3348;color:#56495f;
+  box-shadow:none;cursor:default;
+}
+.book.empty:hover{transform:none;filter:none;box-shadow:none}
+.book.empty::before,.book.empty::after{display:none}
+.book.empty .t{font-size:8px;letter-spacing:3px}
+
+/* ── Detaljkort ──────────────────────────────────────── */
+.backdrop{
+  position:fixed;inset:0;background:rgba(6,4,10,.86);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;padding:20px;z-index:950;
+}
+.backdrop.open{display:flex}
+.card{
+  width:min(620px,100%);max-height:88vh;overflow:auto;
+  background:linear-gradient(180deg,#1e1628,#120d1a);
+  border:4px solid var(--gold);
+  box-shadow:0 0 0 4px #0b0810,0 30px 80px rgba(0,0,0,.85),inset 0 0 50px rgba(0,0,0,.5);
+  padding:30px 30px 26px;position:relative;
+  animation:pop .22s cubic-bezier(.2,1.5,.5,1) both;
+}
+@keyframes pop{from{transform:scale(.9) translateY(14px);opacity:0}to{transform:none;opacity:1}}
+.card h2{font-family:var(--pixel);font-size:16px;color:var(--gold);line-height:1.6;letter-spacing:1px;text-shadow:2px 2px 0 #8a2d0c}
+.card .sub{color:var(--mint);font-size:21px;letter-spacing:1px;margin-top:8px}
+.close{
+  position:absolute;top:12px;right:14px;background:none;border:none;cursor:pointer;
+  color:var(--ink-dim);font-family:var(--pixel);font-size:13px;padding:6px;
+}
+.close:hover{color:var(--gold)}
+.meta{display:flex;flex-wrap:wrap;gap:7px;margin:20px 0 18px}
+.chip{
+  font-size:17px;letter-spacing:1px;padding:3px 11px;
+  border:1px solid #453a52;color:var(--ink-dim);background:rgba(255,255,255,.03);
+}
+.card p.desc{color:#d6c7b1;font-size:21px;margin-bottom:20px}
+.sec{font-family:var(--pixel);font-size:9px;color:var(--gold);letter-spacing:2px;margin:18px 0 9px;opacity:.85}
+.ctrl{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:20px}
+.ctrl dt{color:var(--ink-dim)}
+.ctrl dd{color:var(--ink)}
+.lvls{list-style:none;font-size:19px;color:#c3b39c;columns:2;column-gap:20px}
+.lvls li::before{content:"\25B8 ";color:var(--mint)}
+.play{
+  display:block;width:100%;margin-top:26px;padding:17px;text-align:center;
+  font-family:var(--pixel);font-size:14px;letter-spacing:2px;text-decoration:none;
+  color:#12100a;background:linear-gradient(180deg,var(--gold),#e0a92e);
+  border:3px solid #7a5a12;box-shadow:0 6px 0 #6a4a0d,0 10px 22px rgba(0,0,0,.55);
+  transition:transform .1s,box-shadow .1s;
+}
+.play:hover{transform:translateY(3px);box-shadow:0 3px 0 #6a4a0d,0 6px 14px rgba(0,0,0,.55)}
+
+/* ── Footer ──────────────────────────────────────────── */
+footer{text-align:center;margin-top:46px;color:#6b5c7a;font-size:19px;letter-spacing:2px;position:relative;z-index:2}
+.coin{color:var(--gold);animation:blink 1.15s steps(1,end) infinite}
+@keyframes blink{50%{opacity:0}}
+
+@media(max-width:640px){
+  .books{gap:5px;padding:0 6px}
+  .card{padding:24px 18px 20px}
+  .lvls{columns:1}
+}
+</style>
+</head>
+<body>
+<div class="crt"></div>
+
+<header class="boot">
+  <div class="sign">
+    <h1>VALTER SPEL</h1>
+    <p class="tagline">spelkatalog &middot; <b>est. 2026</b></p>
+  </div>
+</header>
+
+<main>
+  <div class="case" id="case"></div>
+  <footer>
+    <span class="coin">&#9679;</span> <span id="count"></span> I HYLLAN &mdash; PLOCKA EN BOK
+  </footer>
+</main>
+
+<div class="backdrop" id="backdrop">
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="ct" id="card"></div>
+</div>
+
+<script>
+/* ═══ SPELKATALOGEN ═════════════════════════════════════════════════
+   Lägg till ett nytt spel så här:
+     1. Skapa mappen  games/<id>/  och lägg din index.html där.
+     2. Kopiera blocket nedan och ändra värdena.
+   Hyllan bygger sig själv — nya hyllplan skapas automatiskt.
+   ═════════════════════════════════════════════════════════════════ */
+
+const GAMES = [
+  {
+    id:     "gagulk-elmo",
+    title:  "GAGULK & ELMO",
+    sub:    "Heroes of Chaos & Compassion",
+    year:   2026,
+    genre:  "Action / Plattform",
+    players:"1 spelare",
+    color:  "#c8451f", color2:"#8a2b0f", accent:"#ffcf5c",
+    h: 238, w: 60,
+    path:   "games/gagulk-elmo/index.html",
+    desc:   "Två hjältar, ett uppdrag: störta The Boring Tower. Gagulk slår sönder allt i sin väg, Elmo lagar det som går att rädda. Pixelgrafik, sex nivåer och en boss som inte tänker ge sig frivilligt.",
+    tags:   ["Pixelgrafik","Canvas","Bossar"],
+    controls:[
+      ["Rör dig",       "A / D &nbsp;&middot;&nbsp; &larr; &rarr;"],
+      ["Hoppa",         "W &nbsp;&middot;&nbsp; &uarr; &nbsp;&middot;&nbsp; Mellanslag"],
+      ["Attack",        "J / K &nbsp;&middot;&nbsp; Z / X"],
+      ["Välj / starta", "Enter"]
+    ],
+    levels:["GCBS Drone Park","The Meme Vault","The Cubicle Maze",
+            "The Laughter Servers","The Rooftop Helipad","The Boring Tower"]
+  }
+];
+
+/* ═══ Hyllbyggaren ════════════════════════════════════════════════ */
+const PER_SHELF = 6, MIN_SHELVES = 2;
+const caseEl = document.getElementById("case");
+let emptyCount = 0;
+
+function bookEl(g){
+  const b = document.createElement("button");
+  b.className = "book";
+  b.type = "button";
+  b.style.height = g.h + "px";
+  b.style.width  = g.w + "px";
+  b.style.background = "linear-gradient(100deg," + g.color + "," + g.color2 + ")";
+  b.style.setProperty("--bk-accent", g.accent);
+  b.style.setProperty("--bk-glow",   g.color);
+  b.setAttribute("aria-label", g.title + " — öppna information");
+  b.innerHTML =
+    '<span class="dot"></span>' +
+    '<span class="t">' + g.title + '</span>' +
+    '<span class="yr">' + g.year + '</span>';
+  b.addEventListener("click", function(){ openCard(g); });
+  return b;
+}
+
+function emptyEl(){
+  const b = document.createElement("div");
+  b.className = "book empty";
+  emptyCount++;
+  b.style.height = (165 + Math.round(Math.sin(emptyCount * 1.7) * 22)) + "px";
+  b.style.width  = "46px";
+  b.innerHTML = '<span class="t">SNART</span>';
+  return b;
+}
+
+(function build(){
+  const shelves = Math.max(MIN_SHELVES, Math.ceil(GAMES.length / PER_SHELF));
+  for (let s = 0; s < shelves; s++){
+    const slice = GAMES.slice(s * PER_SHELF, (s + 1) * PER_SHELF);
+    const shelf = document.createElement("div"); shelf.className = "shelf";
+    const row   = document.createElement("div"); row.className   = "books";
+    slice.forEach(function(g){ row.appendChild(bookEl(g)); });
+    for (let i = slice.length; i < PER_SHELF; i++) row.appendChild(emptyEl());
+    const plank = document.createElement("div"); plank.className = "plank";
+    shelf.appendChild(row); shelf.appendChild(plank);
+    caseEl.appendChild(shelf);
+  }
+  document.getElementById("count").textContent =
+    GAMES.length === 1 ? "1 SPEL" : GAMES.length + " SPEL";
+})();
+
+/* ═══ Detaljkortet ════════════════════════════════════════════════ */
+const backdrop = document.getElementById("backdrop");
+const card     = document.getElementById("card");
+let lastFocus  = null;
+
+function openCard(g){
+  lastFocus = document.activeElement;
+  card.innerHTML =
+    '<button class="close" aria-label="Stäng">&#10005;</button>' +
+    '<h2 id="ct">' + g.title + '</h2>' +
+    '<p class="sub">' + g.sub + '</p>' +
+    '<div class="meta">' +
+      '<span class="chip">' + g.genre + '</span>' +
+      '<span class="chip">' + g.year + '</span>' +
+      '<span class="chip">' + g.players + '</span>' +
+      g.tags.map(function(t){ return '<span class="chip">' + t + '</span>'; }).join("") +
+    '</div>' +
+    '<p class="desc">' + g.desc + '</p>' +
+    '<p class="sec">KONTROLLER</p>' +
+    '<dl class="ctrl">' +
+      g.controls.map(function(c){ return '<dt>' + c[0] + '</dt><dd>' + c[1] + '</dd>'; }).join("") +
+    '</dl>' +
+    '<p class="sec">NIVÅER</p>' +
+    '<ul class="lvls">' +
+      g.levels.map(function(l){ return '<li>' + l + '</li>'; }).join("") +
+    '</ul>' +
+    '<a class="play" href="' + g.path + '">&#9654; SPELA</a>';
+  card.querySelector(".close").addEventListener("click", closeCard);
+  backdrop.classList.add("open");
+  card.querySelector(".play").focus();
+}
+
+function closeCard(){
+  backdrop.classList.remove("open");
+  if (lastFocus) lastFocus.focus();
+}
+
+backdrop.addEventListener("click", function(e){
+  if (e.target === backdrop) closeCard();
+});
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && backdrop.classList.contains("open")) closeCard();
+});
+</script>
+</body>
+</html>
