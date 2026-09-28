@@ -2,6 +2,8 @@
 
 En retro spelkatalog byggd som en bokhylla. Varje bok på hyllan är ett spel — klicka på ryggen för att läsa om det, tryck **SPELA** för att köra det direkt i webbläsaren.
 
+Live på **[valter.lol](https://valter.lol)**.
+
 Allt är statiskt: ren HTML, CSS och JavaScript. Ingen byggprocess, inga beroenden, inget npm.
 
 ---
