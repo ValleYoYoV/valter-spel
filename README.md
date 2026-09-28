@@ -14,6 +14,7 @@ Allt är statiskt: ren HTML, CSS och JavaScript. Ingen byggprocess, inga beroend
 |------|-----|-------|
 | GAGULK & ELMO: Heroes of Chaos & Compassion | 2026 | Action / Plattform |
 | SHAWARMA AB | 2026 | Simulator &mdash; 1&ndash;2 spelare online |
+| Superpotatisen vs Zombieapokalypsen | 2026 | Arkad / Shooter |
 
 ---
 

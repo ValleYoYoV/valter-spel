@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Superpotatisen vs Zombieapokalypsen</title>
+<meta name="description" content="2D retro arkadspel — Superpotatisen mot zombiehordarna. Vågor, power-ups och Potatismos-bomb.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231D2B53'/%3E%3Crect x='4' y='3' width='8' height='10' fill='%23AB5236'/%3E%3Crect x='3' y='6' width='1' height='6' fill='%23FF004D'/%3E%3Crect x='12' y='6' width='1' height='6' fill='%23FF004D'/%3E%3Crect x='6' y='6' width='2' height='2' fill='%23FFF1E8'/%3E%3Crect x='9' y='6' width='2' height='2' fill='%23FFF1E8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:#05060d;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+  font-family:"Press Start 2P", monospace;
+}
+#stage{position:relative; line-height:0}
+
+canvas{
+  display:block;
+  image-rendering:pixelated;
+  image-rendering:-moz-crisp-edges;
+  image-rendering:crisp-edges;
+  background:#1D2B53;
+  cursor:crosshair;
+  box-shadow:0 0 0 3px #000, 0 0 44px rgba(255,163,0,.20), 0 20px 60px rgba(0,0,0,.8);
+}
+
+/* CRT: tunna scanlines plus en svag vinjett — rent kosmetiskt lager
+   ovanpå canvasen, klick går rakt igenom. */
+#crt{
+  position:absolute; left:0; top:0;
+  pointer-events:none;
+}
+#crt::before{
+  content:""; position:absolute; inset:0;
+  background:repeating-linear-gradient(180deg,
+    rgba(0,0,0,.34) 0 1px, rgba(0,0,0,0) 1px 3px);
+}
+#crt::after{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(ellipse 72% 66% at 50% 50%,
+    rgba(0,0,0,0) 45%, rgba(0,0,0,.62) 100%);
+}
+
+#back{
+  position:fixed; top:10px; left:10px; z-index:60;
+  font-size:9px; letter-spacing:2px; text-decoration:none;
+  color:#FFEC27; background:rgba(5,6,13,.85); border:2px solid #FFEC27;
+  padding:7px 11px; opacity:.28; transition:opacity .2s, background .2s;
+}
+#back:hover{opacity:1; background:#FFEC27; color:#05060d}
+
+#hint{
+  position:fixed; bottom:8px; left:0; right:0; text-align:center;
+  font-size:7px; letter-spacing:1px; color:#3a3f57; pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<a href="../../index.html" id="back">&#8592; HYLLAN</a>
+
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="crt"></div>
+</div>
+
+<p id="hint">WASD / PILTANGENTER &middot; MUS SIKTAR &middot; Z SKJUTER FRAMAT &middot; X MOSBOMB &middot; P PAUS &middot; M LJUD</p>
+
+<!-- Laddas i ordning: config → sprites/sound → entities → main.
+     Vanliga script-taggar (inte moduler) så spelet även fungerar
+     när man öppnar filen direkt från hårddisken. -->
+<script src="js/config.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/sound.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
